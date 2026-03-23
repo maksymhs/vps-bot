@@ -127,6 +127,7 @@ bot.action('usage', async (ctx) => {
 // Git operations
 bot.action(/^gp:(.+)$/, async (ctx) => {
   await answer(ctx)
+  const { Markup } = await import('telegraf')
   const name = ctx.match[1]
   await ctx.editMessageText(`📤 *Push en progreso...*`, { parse_mode: 'Markdown' })
   try {
@@ -136,12 +137,20 @@ bot.action(/^gp:(.+)$/, async (ctx) => {
       ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
     })
   } catch (err) {
-    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    if (err.message === 'INIT_REPO_NEEDED') {
+      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+      })
+    } else {
+      await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    }
   }
 })
 
 bot.action(/^gpl:(.+)$/, async (ctx) => {
   await answer(ctx)
+  const { Markup } = await import('telegraf')
   const name = ctx.match[1]
   await ctx.editMessageText(`📥 *Pull en progreso...*`, { parse_mode: 'Markdown' })
   try {
@@ -151,12 +160,20 @@ bot.action(/^gpl:(.+)$/, async (ctx) => {
       ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
     })
   } catch (err) {
-    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    if (err.message === 'INIT_REPO_NEEDED') {
+      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+      })
+    } else {
+      await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    }
   }
 })
 
 bot.action(/^gs:(.+)$/, async (ctx) => {
   await answer(ctx)
+  const { Markup } = await import('telegraf')
   const name = ctx.match[1]
   try {
     const result = await gitStatus(name)
@@ -165,7 +182,14 @@ bot.action(/^gs:(.+)$/, async (ctx) => {
       ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
     })
   } catch (err) {
-    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    if (err.message === 'INIT_REPO_NEEDED') {
+      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+      })
+    } else {
+      await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+    }
   }
 })
 

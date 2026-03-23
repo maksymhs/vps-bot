@@ -67,6 +67,16 @@ export async function gitPush(name, token = null) {
   const dir = join(PROJECTS_DIR, name)
 
   try {
+    // Verificar si es un repo git
+    try {
+      await run('git', ['status'], { cwd: dir })
+    } catch (err) {
+      if (err.message.includes('not a git repository')) {
+        throw new Error('NO_GIT_REPO')
+      }
+      throw err
+    }
+
     // Hacer commit de cambios (automático)
     await run('git', ['add', '.'], { cwd: dir })
 
@@ -81,18 +91,25 @@ export async function gitPush(name, token = null) {
 
     // Si hay token, usarlo para autenticación
     if (token) {
-      const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
-      const cleanRemote = remoteWithAuth.trim().replace(/https:\/\/.*@github/, 'https://github')
+      try {
+        const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
+        const cleanRemote = remoteWithAuth.trim().replace(/https:\/\/.*@github/, 'https://github')
 
-      if (cleanRemote.includes('github')) {
-        const authRemote = cleanRemote.replace('https://', `https://${token}@`)
-        await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
+        if (cleanRemote.includes('github')) {
+          const authRemote = cleanRemote.replace('https://', `https://${token}@`)
+          await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
+        }
+      } catch {
+        // Ignorar errores de remote
       }
     }
 
     const output = await run('git', pushCmd, { cwd: dir })
     return `✅ Push completado\n\`${output.slice(0, 200)}\``
   } catch (err) {
+    if (err.message === 'NO_GIT_REPO') {
+      throw new Error('INIT_REPO_NEEDED')
+    }
     throw new Error(`Error en push: ${err.message}`)
   }
 }
@@ -101,20 +118,37 @@ export async function gitPull(name, token = null) {
   const dir = join(PROJECTS_DIR, name)
 
   try {
+    // Verificar si es un repo git
+    try {
+      await run('git', ['status'], { cwd: dir })
+    } catch (err) {
+      if (err.message.includes('not a git repository')) {
+        throw new Error('INIT_REPO_NEEDED')
+      }
+      throw err
+    }
+
     // Si hay token, usarlo
     if (token) {
-      const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
-      const cleanRemote = remoteWithAuth.trim().replace(/https:\/\/.*@github/, 'https://github')
+      try {
+        const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
+        const cleanRemote = remoteWithAuth.trim().replace(/https:\/\/.*@github/, 'https://github')
 
-      if (cleanRemote.includes('github')) {
-        const authRemote = cleanRemote.replace('https://', `https://${token}@`)
-        await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
+        if (cleanRemote.includes('github')) {
+          const authRemote = cleanRemote.replace('https://', `https://${token}@`)
+          await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
+        }
+      } catch {
+        // Ignorar errores de remote
       }
     }
 
     const output = await run('git', ['pull', 'origin', 'main'], { cwd: dir })
     return `✅ Pull completado\n\`${output.slice(0, 200)}\``
   } catch (err) {
+    if (err.message === 'INIT_REPO_NEEDED') {
+      throw new Error('INIT_REPO_NEEDED')
+    }
     throw new Error(`Error en pull: ${err.message}`)
   }
 }
@@ -134,6 +168,9 @@ export async function gitStatus(name) {
 *Últimos commits:*
 \`${log}\``
   } catch (err) {
+    if (err.message.includes('not a git repository')) {
+      throw new Error('INIT_REPO_NEEDED')
+    }
     throw new Error(`Error en status: ${err.message}`)
   }
 }
