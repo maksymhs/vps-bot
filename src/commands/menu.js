@@ -95,7 +95,9 @@ export async function showProject(ctx, name) {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
         [toggleBtn, Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('🗑️ Eliminar', `del:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('📤 Push', `gp:${name}`), Markup.button.callback('📥 Pull', `gpl:${name}`)],
+        [Markup.button.callback('📊 Git Status', `gs:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
       ]),
     }
   )

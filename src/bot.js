@@ -7,6 +7,7 @@ import { newCommand, rebuildCommand, listCommand, urlCommand, deleteProjectComma
 import { showMain, showList, showProject, showDeleteConfirm, startNewFlow, pendingNew, startRebuildFlow, startRebuildPatch, startRebuildFull, pendingRebuild, showModelSelect } from './commands/menu.js'
 import { store } from './lib/store.js'
 import { getUsageText } from './lib/usage.js'
+import { gitPush, gitPull, gitStatus } from './commands/git.js'
 import Docker from 'dockerode'
 import { existsSync, rmSync } from 'fs'
 
@@ -121,6 +122,51 @@ bot.action('usage', async (ctx) => {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
   })
+})
+
+// Git operations
+bot.action(/^gp:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  await ctx.editMessageText(`📤 *Push en progreso...*`, { parse_mode: 'Markdown' })
+  try {
+    const result = await gitPush(name)
+    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+    })
+  } catch (err) {
+    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+  }
+})
+
+bot.action(/^gpl:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  await ctx.editMessageText(`📥 *Pull en progreso...*`, { parse_mode: 'Markdown' })
+  try {
+    const result = await gitPull(name)
+    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+    })
+  } catch (err) {
+    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+  }
+})
+
+bot.action(/^gs:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  try {
+    const result = await gitStatus(name)
+    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+    })
+  } catch (err) {
+    await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
+  }
 })
 bot.action('status', async (ctx) => {
   await answer(ctx)
