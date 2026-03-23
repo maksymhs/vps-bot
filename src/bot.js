@@ -4,7 +4,7 @@ import { execFile } from 'child_process'
 import { statusCommand } from './commands/status.js'
 import { psCommand, logsCommand, restartCommand, stopCommand, startCommand } from './commands/docker.js'
 import { newCommand, rebuildCommand, listCommand, urlCommand, deleteProjectCommand, deployNew, deployRebuild } from './commands/projects.js'
-import { showMain, showList, showProject, showDeleteConfirm, startNewFlow, pendingNew, startRebuildFlow, startRebuildPatch, startRebuildFull, pendingRebuild, showModelSelect } from './commands/menu.js'
+import { showMain, showList, showProject, showDeleteConfirm, startNewFlow, pendingNew, startRebuildFlow, startRebuildPatch, startRebuildFull, pendingRebuild, showModelSelect, showGitMenu } from './commands/menu.js'
 import { store } from './lib/store.js'
 import { getUsageText } from './lib/usage.js'
 import { gitPush, gitPull, gitStatus } from './commands/git.js'
@@ -168,6 +168,58 @@ bot.action(/^gs:(.+)$/, async (ctx) => {
     await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
   }
 })
+
+// Git menu
+bot.action(/^git_menu:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  await showGitMenu(ctx, ctx.match[1])
+})
+
+// Inicializar repositorio
+bot.action(/^git_init:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  const { Markup } = await import('telegraf')
+  await ctx.editMessageText(`🔧 *Inicializar Git Repo*\n\n¿Público o Privado?`, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🌍 Público', `git_pub:${name}`), Markup.button.callback('🔒 Privado', `git_priv:${name}`)],
+      [Markup.button.callback('⬅️ Volver', `git_menu:${name}`)],
+    ]),
+  })
+})
+
+bot.action(/^git_pub:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  await ctx.editMessageText(`📝 *Escribe URL del repo público*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
+    parse_mode: 'Markdown'
+  })
+  const pendingGitInit = new Map()
+  pendingGitInit.set(ctx.chat.id, { name, private: false })
+})
+
+bot.action(/^git_priv:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  await ctx.editMessageText(`📝 *Escribe URL del repo privado*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
+    parse_mode: 'Markdown'
+  })
+  const pendingGitInit = new Map()
+  pendingGitInit.set(ctx.chat.id, { name, private: true })
+})
+
+// Commit personalizado
+bot.action(/^git_commit:(.+)$/, async (ctx) => {
+  await answer(ctx)
+  const name = ctx.match[1]
+  await ctx.editMessageText(`💬 *Escribe el mensaje de commit*\n\nEjemplo: "Agregar validación al formulario"`, {
+    parse_mode: 'Markdown'
+  })
+  const pendingGitCommit = new Map()
+  pendingGitCommit.set(ctx.chat.id, { name })
+})
+
 bot.action('status', async (ctx) => {
   await answer(ctx)
   // Run status and show result + back button inline

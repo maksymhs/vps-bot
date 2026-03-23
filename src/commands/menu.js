@@ -95,9 +95,26 @@ export async function showProject(ctx, name) {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
         [toggleBtn, Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
+        [Markup.button.callback('⚙️ Git', `git_menu:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
+        [Markup.button.callback('⬅️ Lista', 'list')],
+      ]),
+    }
+  )
+}
+
+// ── Git Menu ───────────────────────────────────────────────────────────
+
+export async function showGitMenu(ctx, name) {
+  return ctx.editMessageText(
+    `🔧 *Git - ${name}*\n\n¿Qué quieres hacer?`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
         [Markup.button.callback('📤 Push', `gp:${name}`), Markup.button.callback('📥 Pull', `gpl:${name}`)],
-        [Markup.button.callback('📊 Git Status', `gs:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
-        [Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
+        [Markup.button.callback('📊 Status', `gs:${name}`)],
+        [Markup.button.callback('⚙️ Inicializar Repo', `git_init:${name}`)],
+        [Markup.button.callback('💬 Commit Personalizado', `git_commit:${name}`)],
+        [Markup.button.callback('⬅️ Volver', `p:${name}`)],
       ]),
     }
   )

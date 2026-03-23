@@ -41,11 +41,33 @@ export async function initGitRepo(name, gitUrl) {
   }
 }
 
-export async function gitPush(name, token = null) {
+export async function gitCommit(name, message = null, token = null) {
   const dir = join(PROJECTS_DIR, name)
 
   try {
     // Hacer commit de cambios
+    await run('git', ['add', '.'], { cwd: dir })
+
+    const commitMsg = message || `Cambios en ${new Date().toLocaleString('es-ES')}`
+    try {
+      await run('git', ['commit', '-m', commitMsg], { cwd: dir })
+      return `✅ Commit: "${commitMsg}"`
+    } catch (err) {
+      if (err.message.includes('nothing to commit')) {
+        return `ℹ️ No hay cambios para commitear`
+      }
+      throw err
+    }
+  } catch (err) {
+    throw new Error(`Error en commit: ${err.message}`)
+  }
+}
+
+export async function gitPush(name, token = null) {
+  const dir = join(PROJECTS_DIR, name)
+
+  try {
+    // Hacer commit de cambios (automático)
     await run('git', ['add', '.'], { cwd: dir })
 
     try {
