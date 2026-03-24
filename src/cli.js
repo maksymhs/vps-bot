@@ -724,7 +724,7 @@ async function configureTelegram() {
           console.log(chalk.green(`✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
           updateEnvVar('CHAT_ID', chatId.toString())
           console.log(chalk.green('✓ Telegram configured!\n'))
-          return showConfig()
+          return offerStartBot()
         }
       }
       console.log(chalk.yellow('No messages found. Send a message to your bot first and try again.\n'))
@@ -745,8 +745,30 @@ async function configureTelegram() {
     }])
     updateEnvVar('CHAT_ID', chatId)
     console.log(chalk.green('\n✓ Telegram configured!\n'))
+    return offerStartBot()
   }
 
+  return showConfig()
+}
+
+async function offerStartBot() {
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: 'Start Telegram bot now?',
+    loop: false,
+    choices: [
+      { name: 'Start bot', value: 'start' },
+      { name: 'Back to menu', value: 'back' },
+    ],
+  }])
+
+  if (action === 'start') {
+    console.log(chalk.cyan('\nStarting Telegram bot...\n'))
+    try {
+      execSync('node src/bot.js', { stdio: 'inherit', cwd: dirname(envFile) })
+    } catch {}
+  }
   return showConfig()
 }
 
@@ -774,6 +796,12 @@ function updateEnvVar(key, value, comment = false) {
       content += `\n${newLine}\n`
     }
     writeFileSync(envFile, content)
+    // Also update process.env so config reflects changes immediately
+    if (comment) {
+      delete process.env[key]
+    } else {
+      process.env[key] = value
+    }
   } catch {}
 }
 
