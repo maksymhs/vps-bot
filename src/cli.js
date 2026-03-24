@@ -483,7 +483,13 @@ async function showConfig() {
     }
   } catch {}
   console.log(`  Claude Code: ${claudeStatus}`)
-  console.log(`  Telegram:    ${config.botToken ? chalk.green('configured') : chalk.gray('not set')}`)
+  // Telegram status
+  let botRunning = false
+  try { execSync('pgrep -f "node src/bot.js"', { stdio: 'ignore' }); botRunning = true } catch {}
+  const telegramStatus = !process.env.BOT_TOKEN
+    ? chalk.gray('not set')
+    : botRunning ? chalk.green('running') : chalk.yellow('configured (stopped)')
+  console.log(`  Telegram:    ${telegramStatus}`)
   console.log(`  Projects:    ${config.projectsDir}`)
   console.log('')
 
@@ -496,6 +502,7 @@ async function showConfig() {
       { name: 'Configure Claude Code', value: 'claude' },
       { name: 'Set Custom Domain', value: 'domain' },
       { name: 'Set Telegram Bot', value: 'telegram' },
+      ...(process.env.BOT_TOKEN ? [{ name: `${botRunning ? '🟢' : '🔴'} Telegram Bot (${botRunning ? 'running' : 'stopped'})`, value: 'bot' }] : []),
       { name: 'Change Code-Server Password', value: 'password' },
       new inquirer.Separator(),
       { name: 'Back', value: 'back' },
@@ -506,6 +513,7 @@ async function showConfig() {
   if (action === 'claude') return configureClaude()
   if (action === 'domain') return configureDomain()
   if (action === 'telegram') return configureTelegram()
+  if (action === 'bot') return manageTelegramBot()
   if (action === 'password') return configurePassword()
 }
 
@@ -758,16 +766,65 @@ async function offerStartBot() {
     message: 'Start Telegram bot now?',
     loop: false,
     choices: [
-      { name: 'Start bot', value: 'start' },
+      { name: 'Start bot (background)', value: 'start' },
       { name: 'Back to menu', value: 'back' },
     ],
   }])
 
   if (action === 'start') {
-    console.log(chalk.cyan('\nStarting Telegram bot...\n'))
-    try {
-      execSync('node src/bot.js', { stdio: 'inherit', cwd: dirname(envFile) })
-    } catch {}
+    startBotBackground()
+  }
+  return showConfig()
+}
+
+function startBotBackground() {
+  try { execSync('pkill -f "node src/bot.js"', { stdio: 'ignore' }) } catch {}
+  const child = spawn('node', ['src/bot.js'], {
+    cwd: dirname(envFile),
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  })
+  child.unref()
+  console.log(chalk.green('\n✓ Telegram bot started in background (PID: ' + child.pid + ')\n'))
+}
+
+function stopBot() {
+  try {
+    execSync('pkill -f "node src/bot.js"', { stdio: 'ignore' })
+    console.log(chalk.green('\n✓ Telegram bot stopped\n'))
+  } catch {
+    console.log(chalk.gray('\nBot was not running.\n'))
+  }
+}
+
+async function manageTelegramBot() {
+  let running = false
+  try { execSync('pgrep -f "node src/bot.js"', { stdio: 'ignore' }); running = true } catch {}
+
+  const choices = running
+    ? [
+        { name: 'Stop bot', value: 'stop' },
+        { name: 'Restart bot', value: 'restart' },
+      ]
+    : [
+        { name: 'Start bot', value: 'start' },
+      ]
+
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: `Telegram bot is ${running ? chalk.green('running') : chalk.red('stopped')}:`,
+    loop: false,
+    choices: [...choices, new inquirer.Separator(), { name: 'Back', value: 'back' }],
+  }])
+
+  if (action === 'back') return showConfig()
+  if (action === 'start') startBotBackground()
+  if (action === 'stop') stopBot()
+  if (action === 'restart') {
+    stopBot()
+    startBotBackground()
   }
   return showConfig()
 }
