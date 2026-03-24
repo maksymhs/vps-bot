@@ -438,55 +438,41 @@ async function configureDomain() {
     console.log(chalk.yellow(`Setting up Caddy SSL for *.${domain}...\n`))
 
     const csPort = config.codeServerPort || 8080
+    const steps = [
+      { name: 'Create Docker network', cmd: 'docker network create caddy 2>/dev/null || true' },
+      { name: 'Remove old caddy-proxy', cmd: 'docker rm -f caddy-proxy 2>/dev/null || true' },
+      { name: 'Stop code-server', cmd: 'pkill -f code-server 2>/dev/null || true' },
+      { name: 'Pull caddy-docker-proxy', cmd: 'docker pull lucaslorentz/caddy-docker-proxy:ci-alpine' },
+      { name: 'Start caddy-proxy', cmd: `docker run -d --name caddy-proxy --restart unless-stopped --network caddy -p 80:80 -p 443:443 -p 2019:2019 -v /var/run/docker.sock:/var/run/docker.sock -v caddy_data:/data -l "caddy.admin=0.0.0.0:2019" -l "caddy_0=code.${domain}" -l "caddy_0.reverse_proxy=host.docker.internal:${csPort}" --add-host host.docker.internal:host-gateway lucaslorentz/caddy-docker-proxy:ci-alpine` },
+    ]
 
-    try {
-      // Ensure caddy network exists
-      execSync('docker network create caddy 2>/dev/null || true')
+    let failed = false
+    for (const step of steps) {
+      try {
+        console.log(chalk.gray(`  [${step.name}]...`))
+        execSync(step.cmd, { stdio: 'inherit' })
+        console.log(chalk.green(`  ✓ ${step.name}`))
+      } catch (err) {
+        console.log(chalk.red(`  ✗ ${step.name} FAILED`))
+        console.log(chalk.red(`    ${err.stderr ? err.stderr.toString().trim() : err.message}`))
+        failed = true
+        break
+      }
+    }
 
-      // Stop existing caddy-proxy
-      execSync('docker rm -f caddy-proxy 2>/dev/null || true')
-
-      // Rebind code-server to 127.0.0.1 (Caddy will proxy)
-      execSync('pkill -f code-server 2>/dev/null || true')
+    if (!failed) {
+      // Rebind code-server behind Caddy
       const csConfigDir = `${process.env.HOME}/.config/code-server`
-      execSync(`mkdir -p ${csConfigDir}`)
+      mkdirSync(csConfigDir, { recursive: true })
       writeFileSync(join(csConfigDir, 'config.yaml'),
         `bind-addr: 127.0.0.1:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
       spawn('code-server', ['--disable-telemetry', config.projectsDir], {
         detached: true, stdio: 'ignore',
       }).unref()
 
-      // Pull caddy-docker-proxy image
-      console.log(chalk.gray('  Pulling caddy-docker-proxy image...'))
-      execSync('docker pull lucaslorentz/caddy-docker-proxy:ci-alpine', { stdio: 'inherit' })
-
-      // Launch caddy-docker-proxy with code.{domain} → code-server
-      const dockerCmd = [
-        'docker run -d',
-        '--name caddy-proxy',
-        '--restart unless-stopped',
-        '--network caddy',
-        '-p 80:80 -p 443:443 -p 2019:2019',
-        '-v /var/run/docker.sock:/var/run/docker.sock',
-        '-v caddy_data:/data',
-        '-l "caddy.admin=0.0.0.0:2019"',
-        `-l "caddy_0=code.${domain}"`,
-        `-l "caddy_0.reverse_proxy=host.docker.internal:${csPort}"`,
-        '--add-host host.docker.internal:host-gateway',
-        'lucaslorentz/caddy-docker-proxy:ci-alpine',
-      ].join(' ')
-
-      execSync(dockerCmd, { stdio: 'inherit' })
-
       console.log(chalk.green(`\n✓ Caddy running with auto-SSL`))
       console.log(chalk.green(`✓ https://code.${domain} → Code-Server`))
       console.log(chalk.green(`✓ https://{app}.${domain} → Project apps`))
-    } catch (err) {
-      const stderr = err.stderr ? err.stderr.toString() : err.message
-      console.log(chalk.red(`\n⚠ Caddy setup failed:`))
-      console.log(chalk.red(`  ${stderr}`))
-      console.log(chalk.gray('\n  Debug: docker ps -a | grep caddy'))
-      console.log(chalk.gray('  Debug: docker logs caddy-proxy\n'))
     }
   } else {
     updateEnvVar('DOMAIN', '', true)
