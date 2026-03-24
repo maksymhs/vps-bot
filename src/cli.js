@@ -673,10 +673,15 @@ async function configureDomain() {
 }
 
 async function configureTelegram() {
+  console.log(chalk.cyan('\n━━━ Telegram Bot Setup ━━━\n'))
+  console.log(chalk.gray('  1. Open Telegram and talk to @BotFather'))
+  console.log(chalk.gray('  2. Send /newbot and follow the steps'))
+  console.log(chalk.gray('  3. Copy the Bot Token\n'))
+
   const { token } = await inquirer.prompt([{
     type: 'input',
     name: 'token',
-    message: 'Telegram Bot Token (from @BotFather):',
+    message: 'Bot Token (leave empty to disable):',
     default: config.botToken || '',
   }])
 
@@ -687,17 +692,61 @@ async function configureTelegram() {
     return showConfig()
   }
 
-  const { chatId } = await inquirer.prompt([{
-    type: 'input',
-    name: 'chatId',
-    message: 'Your Telegram Chat ID:',
-    default: config.chatId?.toString() || '',
-    validate: (input) => /^-?\d+$/.test(input) ? true : 'Must be a number',
+  updateEnvVar('BOT_TOKEN', token)
+
+  // Try to auto-detect Chat ID
+  console.log(chalk.cyan('\n━━━ Chat ID ━━━\n'))
+  console.log(chalk.gray('  Send any message to your bot in Telegram, then:'))
+  console.log()
+
+  const { method } = await inquirer.prompt([{
+    type: 'list',
+    name: 'method',
+    message: 'How to get your Chat ID:',
+    loop: false,
+    choices: [
+      { name: 'Auto-detect (send a message to your bot first, then select this)', value: 'auto' },
+      { name: 'Enter manually (use @userinfobot to find it)', value: 'manual' },
+      { name: 'Skip for now', value: 'skip' },
+    ],
   }])
 
-  updateEnvVar('BOT_TOKEN', token)
-  updateEnvVar('CHAT_ID', chatId)
-  console.log(chalk.green('\n✓ Telegram configured\n'))
+  if (method === 'auto') {
+    console.log(chalk.yellow('\nFetching latest messages from bot...\n'))
+    try {
+      const result = execSync(`curl -sf "https://api.telegram.org/bot${token}/getUpdates" 2>/dev/null`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString()
+      const data = JSON.parse(result)
+      if (data.ok && data.result && data.result.length > 0) {
+        const lastMsg = data.result[data.result.length - 1]
+        const chatId = lastMsg.message?.chat?.id || lastMsg.my_chat_member?.chat?.id
+        if (chatId) {
+          const chatName = lastMsg.message?.chat?.first_name || lastMsg.my_chat_member?.chat?.first_name || ''
+          console.log(chalk.green(`✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
+          updateEnvVar('CHAT_ID', chatId.toString())
+          console.log(chalk.green('✓ Telegram configured!\n'))
+          return showConfig()
+        }
+      }
+      console.log(chalk.yellow('No messages found. Send a message to your bot first and try again.\n'))
+    } catch {
+      console.log(chalk.red('Could not reach Telegram API. Check your token.\n'))
+    }
+    return showConfig()
+  }
+
+  if (method === 'manual') {
+    console.log(chalk.gray('\n  Tip: Send /start to @userinfobot in Telegram to get your Chat ID\n'))
+    const { chatId } = await inquirer.prompt([{
+      type: 'input',
+      name: 'chatId',
+      message: 'Your Chat ID:',
+      default: config.chatId?.toString() || '',
+      validate: (input) => /^-?\d+$/.test(input) ? true : 'Must be a number',
+    }])
+    updateEnvVar('CHAT_ID', chatId)
+    console.log(chalk.green('\n✓ Telegram configured!\n'))
+  }
+
   return showConfig()
 }
 
