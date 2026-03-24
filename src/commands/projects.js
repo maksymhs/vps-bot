@@ -105,7 +105,8 @@ const CADDY_SITES_DIR = '/etc/caddy/sites'
 
 function writeCaddySite(name, port) {
   const internalPort = port + 10000
-  const siteConfig = `:${port} {
+  const ip = config.ipAddress || 'localhost'
+  const siteConfig = `https://${ip}:${port} {
     tls internal
     reverse_proxy 127.0.0.1:${internalPort}
 }

@@ -256,9 +256,10 @@ else
 import /etc/caddy/sites/*.caddy
 CADDYEOF
 
-    # Code-server HTTPS site
+    # Code-server HTTPS site — must use https://IP for Caddy to serve TLS
+    SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
     cat > /etc/caddy/sites/code-server.caddy << EOF
-:${CS_HTTPS_PORT} {
+https://${SERVER_IP}:${CS_HTTPS_PORT} {
     tls internal
     reverse_proxy 127.0.0.1:${CS_PORT}
 }

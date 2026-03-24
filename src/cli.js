@@ -695,7 +695,7 @@ async function configureDomain() {
     writeFileSync('/etc/caddy/Caddyfile',
       `{\n    auto_https disable_redirects\n}\n\nimport /etc/caddy/sites/*.caddy\n`)
     writeFileSync(`/etc/caddy/sites/code-server.caddy`,
-      `:${csHttpsPort} {\n    tls internal\n    reverse_proxy 127.0.0.1:${csPort}\n}\n`)
+      `https://${ip}:${csHttpsPort} {\n    tls internal\n    reverse_proxy 127.0.0.1:${csPort}\n}\n`)
 
     // Code-server binds to localhost only
     execSync('pkill -f code-server 2>/dev/null || true')
