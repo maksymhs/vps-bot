@@ -414,7 +414,19 @@ async function showConfig() {
     console.log(`  Domain:      ${chalk.green(config.domain)} (SSL)`)
   }
   console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`}`)
-  console.log(`  Claude CLI:  ${config.claudeCli || chalk.gray('not set')}`)
+
+  // Claude Code status
+  let claudeStatus = chalk.gray('not installed')
+  try {
+    execSync('claude --version', { stdio: 'ignore' })
+    try {
+      execSync('claude auth status', { stdio: 'ignore' })
+      claudeStatus = chalk.green('logged in')
+    } catch {
+      claudeStatus = chalk.yellow('installed (not logged in)')
+    }
+  } catch {}
+  console.log(`  Claude Code: ${claudeStatus}`)
   console.log(`  Telegram:    ${config.botToken ? chalk.green('configured') : chalk.gray('not set')}`)
   console.log(`  Projects:    ${config.projectsDir}`)
   console.log('')
