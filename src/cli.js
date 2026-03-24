@@ -438,10 +438,13 @@ async function configureDomain() {
     console.log(chalk.yellow(`Setting up Caddy SSL for *.${domain}...\n`))
 
     const csPort = config.codeServerPort || 8080
+
+    // Stop code-server (non-critical, ignore errors)
+    try { execSync('pkill -f code-server', { stdio: 'ignore' }) } catch {}
+
     const steps = [
       { name: 'Create Docker network', cmd: 'docker network create caddy 2>/dev/null || true' },
       { name: 'Remove old caddy-proxy', cmd: 'docker rm -f caddy-proxy 2>/dev/null || true' },
-      { name: 'Stop code-server', cmd: 'pkill -f code-server 2>/dev/null || true' },
       { name: 'Pull caddy-docker-proxy', cmd: 'docker pull lucaslorentz/caddy-docker-proxy:ci-alpine' },
       { name: 'Start caddy-proxy', cmd: `docker run -d --name caddy-proxy --restart unless-stopped --network caddy -p 80:80 -p 443:443 -p 2019:2019 -v /var/run/docker.sock:/var/run/docker.sock -v caddy_data:/data -l "caddy.admin=0.0.0.0:2019" -l "caddy_0=code.${domain}" -l "caddy_0.reverse_proxy=host.docker.internal:${csPort}" --add-host host.docker.internal:host-gateway lucaslorentz/caddy-docker-proxy:ci-alpine` },
     ]
