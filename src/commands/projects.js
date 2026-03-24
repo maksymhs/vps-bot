@@ -430,34 +430,45 @@ async function dockerComposeUp(dir, onProgress = null) {
     return
   }
 
-  // Modo con salida en vivo
+  // Modo con salida simplificada
   return new Promise((resolve, reject) => {
-    const lines = []
+    const allLines = []
     const child = spawn('docker', ['compose', 'up', '--build', '-d'], { cwd: dir })
+    const steps = new Set()
+
+    const parseStep = (line) => {
+      // Extract meaningful Docker build steps
+      if (/\[\d+\/\d+\]/.test(line)) {
+        const match = line.match(/\[\d+\/\d+\]\s+(.+)/)
+        if (match) return `📦 ${match[1].split(' ').slice(0, 3).join(' ')}`
+      }
+      if (/Building/.test(line)) return '🔨 Building image...'
+      if (/Built/.test(line)) return '✅ Image built'
+      if (/Creating/.test(line) && /Container/.test(line)) return '📦 Creating container...'
+      if (/Started/.test(line)) return '🚀 Container started'
+      if (/npm install/.test(line) || /added \d+ packages/.test(line)) return '📦 npm install...'
+      return null
+    }
 
     child.stdout?.on('data', (data) => {
-      lines.push(...data.toString().split('\n').filter(l => l.trim()))
-      updateProgress()
+      allLines.push(data.toString())
     })
 
     child.stderr?.on('data', (data) => {
-      lines.push(`❌ ${data.toString()}`)
-      updateProgress()
+      const text = data.toString()
+      allLines.push(text)
+      for (const line of text.split('\n')) {
+        const step = parseStep(line)
+        if (step && !steps.has(step)) {
+          steps.add(step)
+          onProgress(step)
+        }
+      }
     })
 
-    let lastUpdate = Date.now()
-    const updateProgress = async () => {
-      if (Date.now() - lastUpdate > 1000) {
-        lastUpdate = Date.now()
-        const recent = lines.slice(-15).join('\n')
-        await onProgress(recent)
-      }
-    }
-
     child.on('close', async (code) => {
-      await updateProgress()
       if (code !== 0) {
-        reject(new Error(`docker compose up falló\n${lines.slice(-5).join('\n')}`))
+        reject(new Error(`docker compose up falló\n${allLines.slice(-3).join('\n')}`))
       } else {
         resolve()
       }
@@ -480,7 +491,13 @@ async function getContainerIp(name) {
   })
   if (!containers.length) return null
   const info = await getDocker().getContainer(containers[0].Id).inspect()
-  return info.NetworkSettings.Networks?.caddy?.IPAddress ?? null
+  // Try caddy network first, then any network with an IP
+  const networks = info.NetworkSettings.Networks || {}
+  if (networks.caddy?.IPAddress) return networks.caddy.IPAddress
+  for (const net of Object.values(networks)) {
+    if (net.IPAddress) return net.IPAddress
+  }
+  return null
 }
 
 async function getContainerLogs(name) {
@@ -563,47 +580,44 @@ CMD ["npm", "start"]`
   writeComposeFile(dir, name)
   await onStatus('🐳 Levantando Docker...')
 
-  const onDockerProgress = async (logs) => {
-    const truncated = logs.slice(-1500)
-    await onStatus(`🐳 \`\`\`\n${truncated}\n\`\`\``)
+  const onDockerProgress = async (step) => {
+    await onStatus(`🐳 ${step}`)
   }
 
   await dockerComposeUp(dir, onDockerProgress)
 
   await onStatus('🔍 Verificando que arranca...')
-  const ip = await getContainerIp(name)
 
-  if (!ip) {
-    const logs = await getContainerLogs(name)
-    throw new Error(`Container no arrancó.\n${logs.slice(-800)}`)
+  // In IP mode, check via localhost:mappedPort; in domain mode, use container IP:3000
+  const project = store.get(name)
+  let healthHost, healthPort
+  if (!config.domain && project?.port) {
+    healthHost = '127.0.0.1'
+    healthPort = project.port
+  } else {
+    const ip = await getContainerIp(name)
+    if (!ip) {
+      const logs = await getContainerLogs(name)
+      throw new Error(`Container no arrancó.\n${logs.slice(-800)}`)
+    }
+    healthHost = ip
+    healthPort = 3000
   }
 
-  await onStatus(`🐳 Container IP: \`${ip}:3000\`\n🔄 Esperando respuesta HTTP...`)
+  await onStatus(`🔄 Esperando respuesta HTTP en ${healthHost}:${healthPort}...`)
 
   const onHealthProgress = async (msg) => {
     await onStatus(`🔍 ${msg}`)
   }
 
-  const healthy = await pollHealth(ip, 3000, 40_000, onHealthProgress)
+  const healthy = await pollHealth(healthHost, healthPort, 40_000, onHealthProgress)
   if (!healthy) {
     const logs = await getContainerLogs(name)
     throw new Error(`App no responde en 40s.\n${logs.slice(-800)}`)
   }
 
-  // Información final
-  const containers = await getDocker().listContainers({
-    all: true,
-    filters: JSON.stringify({ name: [`${name}-app`] }),
-  }).catch(() => [])
-
-  const containerInfo = containers[0]
-  if (containerInfo) {
-    const port = containerInfo.Ports?.[0]?.PublicPort || 'N/A'
-    const status = containerInfo.State
-    await onStatus(`✅ App en ejecución\n\n📊 Detalles:\n• IP: \`${ip}\`\n• Puerto: \`${port}\`\n• Estado: \`${status}\`\n• Imagen: \`${containerInfo.Image}\``)
-  } else {
-    await onStatus(`✅ App verificada y ejecutándose\n🔗 \`${ip}:3000\``)
-  }
+  const url = projectUrl(name)
+  await onStatus(`✅ App en ejecución\n🔗 ${url}`)
 }
 
 async function deployWithRetry(ctx, dir, name, description, action, model = 'claude-sonnet-4-6') {
