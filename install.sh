@@ -8,44 +8,102 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 GRAY='\033[0;90m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 chmod +x "${BASH_SOURCE[0]}" 2>/dev/null || true
 
-# Silent runner — shows a spinner while command runs
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="${INSTALL_DIR}/install.log"
+
+# Init log file
+echo "=== VPS-CODE-BOT Install $(date -Iseconds) ===" > "$LOG_FILE"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $*" >> "$LOG_FILE"
+}
+
+# Spinner frames
+SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+
+# Animated runner — spinner while command runs, log all output
 run_silent() {
     local msg="$1"
     shift
-    printf "  ${GRAY}%-40s${NC}" "$msg"
-    if "$@" > /dev/null 2>&1; then
-        echo -e " ${GREEN}✓${NC}"
+    log "START: $msg — $*"
+    printf "  ${CYAN}⠋${NC} ${GRAY}%s${NC}" "$msg"
+
+    # Run command, capture output to log
+    local tmpout
+    tmpout=$(mktemp)
+    "$@" > "$tmpout" 2>&1 &
+    local pid=$!
+    local i=0
+
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}%s${NC} ${GRAY}%s${NC}" "${SPINNER_FRAMES[$((i % 10))]}" "$msg"
+        i=$((i + 1))
+        sleep 0.1
+    done
+
+    wait "$pid"
+    local rc=$?
+    cat "$tmpout" >> "$LOG_FILE"
+    rm -f "$tmpout"
+
+    if [ $rc -eq 0 ]; then
+        printf "\r  ${GREEN}✔${NC} %s${NC}                              \n" "$msg"
+        log "  OK: $msg"
         return 0
     else
-        echo -e " ${RED}✗${NC}"
+        printf "\r  ${RED}✘${NC} %s ${DIM}(see install.log)${NC}       \n" "$msg"
+        log "FAIL: $msg (exit $rc)"
         return 1
     fi
 }
 
-# Silent runner for piped commands (bash -c)
+# Animated runner for piped commands (bash -c)
 run_silent_sh() {
     local msg="$1"
     shift
-    printf "  ${GRAY}%-40s${NC}" "$msg"
-    if bash -c "$*" > /dev/null 2>&1; then
-        echo -e " ${GREEN}✓${NC}"
+    log "START: $msg — $*"
+    printf "  ${CYAN}⠋${NC} ${GRAY}%s${NC}" "$msg"
+
+    local tmpout
+    tmpout=$(mktemp)
+    bash -c "$*" > "$tmpout" 2>&1 &
+    local pid=$!
+    local i=0
+
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}%s${NC} ${GRAY}%s${NC}" "${SPINNER_FRAMES[$((i % 10))]}" "$msg"
+        i=$((i + 1))
+        sleep 0.1
+    done
+
+    wait "$pid"
+    local rc=$?
+    cat "$tmpout" >> "$LOG_FILE"
+    rm -f "$tmpout"
+
+    if [ $rc -eq 0 ]; then
+        printf "\r  ${GREEN}✔${NC} %s                              \n" "$msg"
+        log "  OK: $msg"
         return 0
     else
-        echo -e " ${RED}✗${NC}"
+        printf "\r  ${RED}✘${NC} %s ${DIM}(see install.log)${NC}       \n" "$msg"
+        log "FAIL: $msg (exit $rc)"
         return 1
     fi
 }
 
-echo -e "${CYAN}"
-echo "┌─────────────────────────────────────────────────────┐"
-echo "│              VPS-CODE-BOT INSTALLER                │"
-echo "│         Smart VPS Management Platform               │"
-echo "└─────────────────────────────────────────────────────┘"
-echo -e "${NC}"
+echo ""
+echo -e "${CYAN}${BOLD}  ╔═══════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}${BOLD}  ║           ⚡ VPS-CODE-BOT INSTALLER ⚡           ║${NC}"
+echo -e "${CYAN}${BOLD}  ║        Smart VPS Management Platform             ║${NC}"
+echo -e "${CYAN}${BOLD}  ╚═══════════════════════════════════════════════════╝${NC}"
+echo ""
 
 # Detect OS
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -53,31 +111,32 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macos"
 else
-    echo -e "${RED}Unsupported OS: $OSTYPE${NC}"
+    echo -e "  ${RED}✘ Unsupported OS: $OSTYPE${NC}"
     exit 1
 fi
 
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+log "OS=$OS INSTALL_DIR=$INSTALL_DIR"
 
-echo -e "${CYAN}Installing dependencies...${NC}\n"
+echo -e "  ${CYAN}${BOLD}Dependencies${NC}"
+echo -e "  ${DIM}──────────────────────────────────────────${NC}"
 
 # Node.js
 if command -v node &> /dev/null; then
-    echo -e "  Node.js $(node --version)                          ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} Node.js $(node --version)"
 else
     run_silent_sh "Node.js" "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"
 fi
 
 # Docker
 if command -v docker &> /dev/null; then
-    echo -e "  Docker $(docker --version 2>/dev/null | awk '{print $3}' | cut -d',' -f1)                            ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} Docker $(docker --version 2>/dev/null | awk '{print $3}' | cut -d',' -f1)"
 else
     run_silent_sh "Docker" "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh && rm /tmp/get-docker.sh"
 fi
 
 # Caddy
 if command -v caddy &> /dev/null; then
-    echo -e "  Caddy $(caddy version 2>/dev/null | awk '{print $1}' || echo '')                          ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} Caddy $(caddy version 2>/dev/null | awk '{print $1}' || echo '')"
 else
     run_silent_sh "Caddy" \
         "apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl && \
@@ -88,7 +147,7 @@ fi
 
 # Claude Code CLI
 if command -v claude &> /dev/null; then
-    echo -e "  Claude Code CLI                              ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} Claude Code CLI"
     CLAUDE_CLI=$(command -v claude)
 else
     run_silent "Claude Code CLI" npm install -g @anthropic-ai/claude-code
@@ -97,7 +156,7 @@ fi
 
 # Code-Server
 if command -v code-server &> /dev/null; then
-    echo -e "  Code-Server                                  ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} Code-Server"
 else
     run_silent_sh "Code-Server" "curl -fsSL https://code-server.dev/install.sh | sh"
 fi
@@ -124,7 +183,7 @@ fi
 VPSBOT_USER="vpsbot"
 VPSBOT_HOME="/home/${VPSBOT_USER}"
 if id "$VPSBOT_USER" &>/dev/null; then
-    echo -e "  User '${VPSBOT_USER}'                                 ${GREEN}✓${NC}"
+    echo -e "  ${GREEN}✔${NC} User '${VPSBOT_USER}'"
 else
     run_silent "User '${VPSBOT_USER}'" useradd -m -s /bin/bash "$VPSBOT_USER"
 fi
@@ -133,11 +192,9 @@ chmod -R o+rX "$INSTALL_DIR" 2>/dev/null || true
 
 # npm install
 echo ""
+echo -e "  ${CYAN}${BOLD}Setup${NC}"
+echo -e "  ${DIM}──────────────────────────────────────────${NC}"
 run_silent "npm install" bash -c "cd '$INSTALL_DIR' && npm install"
-
-# Setup
-echo ""
-echo -e "${CYAN}Configuring...${NC}\n"
 
 cd "$INSTALL_DIR"
 node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS" 2>/dev/null || true
@@ -146,6 +203,10 @@ node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS" 2>/dev/null || true
 if [ -f "${INSTALL_DIR}/.env" ]; then
     source "${INSTALL_DIR}/.env" 2>/dev/null || true
 fi
+
+echo ""
+echo -e "  ${CYAN}${BOLD}Services${NC}"
+echo -e "  ${DIM}──────────────────────────────────────────${NC}"
 
 # Docker daemon
 if ! docker info &> /dev/null; then
@@ -218,7 +279,7 @@ EOF
     sleep 1
     if systemctl is-active --quiet code-server; then
         IP_DISPLAY=$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost')
-        echo -e "  Code-Server → http://${IP_DISPLAY}:${CS_PORT}      ${GREEN}✓${NC}"
+        echo -e "  ${GREEN}✔${NC} Code-Server → ${CYAN}http://${IP_DISPLAY}:${CS_PORT}${NC}"
     fi
 fi
 
@@ -246,9 +307,10 @@ systemctl daemon-reload > /dev/null 2>&1
 chown -R "${VPSBOT_USER}:${VPSBOT_USER}" "$PROJECTS_DIR" 2>/dev/null || true
 
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  Installation complete!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "  ${GREEN}${BOLD}╔═══════════════════════════════════════════════════╗${NC}"
+echo -e "  ${GREEN}${BOLD}║          ✔ Installation complete!                ║${NC}"
+echo -e "  ${GREEN}${BOLD}╚═══════════════════════════════════════════════════╝${NC}"
+echo -e "  ${DIM}Log: ${LOG_FILE}${NC}"
 echo ""
 
 # Launch main menu
