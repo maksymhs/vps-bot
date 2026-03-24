@@ -442,16 +442,17 @@ async function showConfig() {
 }
 
 async function configureClaude() {
-  // Check if already installed
+  // Check if installed
   let installed = false
   try {
     const ver = execSync('claude --version 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
-    console.log(chalk.green(`\n✓ Claude Code CLI found: ${ver}\n`))
+    console.log(chalk.green(`\n✓ Claude Code CLI: ${ver}\n`))
     installed = true
   } catch {
-    console.log(chalk.yellow('\nClaude Code CLI not found.\n'))
+    console.log(chalk.yellow('\nClaude Code CLI not installed.\n'))
   }
 
+  // Step 1: Install if needed
   if (!installed) {
     const { action } = await inquirer.prompt([{
       type: 'list',
@@ -460,45 +461,49 @@ async function configureClaude() {
       loop: false,
       choices: [
         { name: 'Install now (npm install -g @anthropic-ai/claude-code)', value: 'install' },
-        { name: 'Set path manually', value: 'path' },
         { name: 'Back', value: 'back' },
       ],
     }])
 
     if (action === 'back') return showConfig()
 
-    if (action === 'install') {
-      console.log(chalk.yellow('\nInstalling Claude Code CLI...\n'))
-      try {
-        execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' })
-        const path = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
-        updateEnvVar('CLAUDE_CLI', path)
-        console.log(chalk.green(`\n✓ Installed: ${path}\n`))
-      } catch (err) {
-        console.log(chalk.red(`\n✗ Installation failed: ${err.message}\n`))
-      }
-      return showConfig()
-    }
-
-    if (action === 'path') {
-      const { path } = await inquirer.prompt([{
-        type: 'input',
-        name: 'path',
-        message: 'Full path to Claude Code CLI:',
-      }])
-      if (path) {
-        updateEnvVar('CLAUDE_CLI', path)
-        console.log(chalk.green(`\n✓ Claude CLI set to: ${path}\n`))
-      }
-      return showConfig()
-    }
-  } else {
-    // Already installed, just update path in .env
+    console.log(chalk.yellow('\nInstalling Claude Code CLI...\n'))
     try {
-      const path = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
-      updateEnvVar('CLAUDE_CLI', path)
-      console.log(chalk.green(`✓ Path saved: ${path}\n`))
-    } catch {}
+      execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' })
+      installed = true
+    } catch (err) {
+      console.log(chalk.red(`\n✗ Installation failed: ${err.message}\n`))
+      return showConfig()
+    }
+  }
+
+  // Step 2: Save path
+  try {
+    const cliPath = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+    updateEnvVar('CLAUDE_CLI', cliPath)
+    console.log(chalk.green(`✓ Path: ${cliPath}\n`))
+  } catch {}
+
+  // Step 3: Login
+  const { doLogin } = await inquirer.prompt([{
+    type: 'list',
+    name: 'doLogin',
+    message: 'Login to Claude (opens auth URL):',
+    loop: false,
+    choices: [
+      { name: 'Login now', value: true },
+      { name: 'Skip (login later)', value: false },
+    ],
+  }])
+
+  if (doLogin) {
+    console.log(chalk.cyan('\nLaunching Claude login... Follow the URL to authenticate.\n'))
+    try {
+      execSync('claude login', { stdio: 'inherit' })
+      console.log(chalk.green('\n✓ Claude authenticated!\n'))
+    } catch {
+      console.log(chalk.yellow('\nLogin cancelled or failed. You can login later: claude login\n'))
+    }
   }
 
   return showConfig()
