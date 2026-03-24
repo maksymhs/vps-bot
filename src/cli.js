@@ -36,8 +36,8 @@ const cliCtx = {
   telegram: { editMessageText: async () => {} },
 }
 
-async function showMainMenu() {
-  console.clear()
+async function showMainMenu(clear = true) {
+  if (clear) console.clear()
   console.log(chalk.cyan(getBanner()))
   console.log(chalk.gray(`v${PROJECT.version}\n`))
 
@@ -321,6 +321,7 @@ async function showNewProject() {
     type: 'list',
     name: 'model',
     message: 'Select model:',
+    loop: false,
     choices: [
       { name: 'Sonnet (recommended)', value: 'claude-sonnet-4-6' },
       { name: 'Opus (more powerful)', value: 'claude-opus-4-6' },
@@ -328,14 +329,19 @@ async function showNewProject() {
     ],
   }])
 
-  const { confirm } = await inquirer.prompt([{
-    type: 'confirm',
-    name: 'confirm',
-    message: `Create "${name}" with ${model.includes('opus') ? 'Opus' : model.includes('haiku') ? 'Haiku' : 'Sonnet'}?`,
-    default: true,
+  const modelLabel = model.includes('opus') ? 'Opus' : model.includes('haiku') ? 'Haiku' : 'Sonnet'
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: `Create "${name}" with ${modelLabel}?`,
+    loop: false,
+    choices: [
+      { name: '→ Create project', value: 'go' },
+      { name: '← Back', value: 'back' },
+    ],
   }])
 
-  if (!confirm) return showMainMenu()
+  if (action === 'back') return showMainMenu()
 
   console.log(chalk.cyan(`\nCreating project: ${name}...\n`))
 
@@ -353,7 +359,7 @@ async function showNewProject() {
     console.error(chalk.red(`\nCreation failed: ${err.message}\n`))
   }
 
-  return showMainMenu()
+  return showMainMenu(false)
 }
 
 async function showStatus() {
