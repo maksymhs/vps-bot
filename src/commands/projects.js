@@ -14,7 +14,13 @@ function projectDir(name) {
 }
 
 function projectUrl(name) {
-  return config.projectUrl(name)
+  if (config.domain) {
+    return `https://${name}.${config.domain}`
+  }
+  const project = store.get(name)
+  const port = project?.port
+  const ip = config.ipAddress || 'localhost'
+  return port ? `http://${ip}:${port}` : `http://${ip}`
 }
 
 function run(cmd, args, opts = {}) {
@@ -85,8 +91,20 @@ function runWithStreaming(cmd, args, opts = {}) {
   })
 }
 
+function getNextPort() {
+  const BASE_PORT = 4000
+  const projects = store.getAll()
+  const usedPorts = new Set(Object.values(projects).map(p => p.port).filter(Boolean))
+  let port = BASE_PORT
+  while (usedPorts.has(port)) port++
+  return port
+}
+
 function writeComposeFile(dir, name) {
-  const compose = `services:
+  let compose
+  if (config.domain) {
+    // Domain mode: Caddy reverse proxy via labels
+    compose = `services:
   app:
     build: .
     restart: unless-stopped
@@ -100,6 +118,19 @@ networks:
   caddy:
     external: true
 `
+  } else {
+    // IP mode: expose port directly on host
+    const port = store.get(name)?.port || getNextPort()
+    // Save port to store so it persists across rebuilds
+    store.set(name, { port })
+    compose = `services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${port}:3000"
+`
+  }
   writeFileSync(join(dir, 'docker-compose.yml'), compose)
 }
 
