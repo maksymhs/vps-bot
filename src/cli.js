@@ -11,7 +11,7 @@ import { buildingSet } from './lib/build-state.js'
 import inquirer from 'inquirer'
 import si from 'systeminformation'
 import chalk from 'chalk'
-import { execFile, spawn } from 'child_process'
+import { execFile, execSync, spawn } from 'child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
@@ -417,17 +417,74 @@ async function configureDomain() {
     default: config.domain || '',
   }])
 
-  updateEnvVar('DOMAIN', domain)
   if (domain) {
+    updateEnvVar('DOMAIN', domain)
     updateEnvVar('IP_ADDRESS', '', true)
-    console.log(chalk.green(`\n✓ Domain set to ${domain}`))
-    console.log(chalk.gray('  Run install.sh again to configure Caddy SSL\n'))
+
+    console.log(chalk.yellow(`\nSetting up Caddy SSL for *.${domain}...\n`))
+
+    const csPort = config.codeServerPort || 8080
+
+    try {
+      // Ensure caddy network exists
+      execSync('docker network create caddy 2>/dev/null || true')
+
+      // Stop existing caddy-proxy
+      execSync('docker rm -f caddy-proxy 2>/dev/null || true')
+
+      // Rebind code-server to 127.0.0.1 (Caddy will proxy)
+      execSync('pkill -f code-server 2>/dev/null || true')
+      const csConfigDir = `${process.env.HOME}/.config/code-server`
+      execSync(`mkdir -p ${csConfigDir}`)
+      writeFileSync(join(csConfigDir, 'config.yaml'),
+        `bind-addr: 127.0.0.1:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
+      spawn('code-server', ['--disable-telemetry', config.projectsDir], {
+        detached: true, stdio: 'ignore',
+      }).unref()
+
+      // Launch caddy-docker-proxy with code.{domain} → code-server
+      execSync(`docker run -d \
+        --name caddy-proxy \
+        --restart unless-stopped \
+        --network caddy \
+        -p 80:80 -p 443:443 -p 2019:2019 \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v caddy_data:/data \
+        -l "caddy.admin=0.0.0.0:2019" \
+        -l "caddy_0=code.${domain}" \
+        -l "caddy_0.reverse_proxy=host.docker.internal:${csPort}" \
+        --add-host host.docker.internal:host-gateway \
+        lucaslorentz/caddy-docker-proxy:ci-alpine`, { stdio: 'pipe' })
+
+      console.log(chalk.green(`✓ Caddy running with auto-SSL`))
+      console.log(chalk.green(`✓ https://code.${domain} → Code-Server`))
+      console.log(chalk.green(`✓ https://{app}.${domain} → Project apps`))
+    } catch (err) {
+      console.log(chalk.red(`\n⚠ Caddy setup failed: ${err.message}`))
+      console.log(chalk.gray('  Check: docker logs caddy-proxy\n'))
+    }
   } else {
     updateEnvVar('DOMAIN', '', true)
     const ip = config.ipAddress || 'localhost'
     updateEnvVar('IP_ADDRESS', ip)
-    console.log(chalk.green(`\n✓ Switched to IP mode (${ip})\n`))
+
+    // Stop caddy-proxy, rebind code-server to 0.0.0.0
+    execSync('docker rm -f caddy-proxy 2>/dev/null || true')
+    execSync('pkill -f code-server 2>/dev/null || true')
+    const csPort = config.codeServerPort || 8080
+    const csConfigDir = `${process.env.HOME}/.config/code-server`
+    execSync(`mkdir -p ${csConfigDir}`)
+    writeFileSync(join(csConfigDir, 'config.yaml'),
+      `bind-addr: 0.0.0.0:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
+    spawn('code-server', ['--disable-telemetry', config.projectsDir], {
+      detached: true, stdio: 'ignore',
+    }).unref()
+
+    console.log(chalk.green(`\n✓ Switched to IP mode`))
+    console.log(chalk.green(`✓ Code-Server: http://${ip}:${csPort}\n`))
   }
+
+  console.log()
   return showConfig()
 }
 
