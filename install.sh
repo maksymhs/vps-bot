@@ -102,6 +102,24 @@ else
     run_silent_sh "Code-Server" "curl -fsSL https://code-server.dev/install.sh | sh"
 fi
 
+# Code-Server extensions & settings
+if command -v code-server &> /dev/null; then
+    run_silent "Claude Code extension" code-server --install-extension anthropic.claude-code
+    # Dark theme + settings
+    CS_SETTINGS_DIR="$HOME/.local/share/code-server/User"
+    mkdir -p "$CS_SETTINGS_DIR"
+    if [ ! -f "$CS_SETTINGS_DIR/settings.json" ]; then
+        cat > "$CS_SETTINGS_DIR/settings.json" << 'SETTINGS'
+{
+    "workbench.colorTheme": "Default Dark Modern",
+    "editor.fontSize": 14,
+    "editor.minimap.enabled": false,
+    "workbench.startupEditor": "none"
+}
+SETTINGS
+    fi
+fi
+
 # vpsbot user
 VPSBOT_USER="vpsbot"
 VPSBOT_HOME="/home/${VPSBOT_USER}"
