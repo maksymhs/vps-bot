@@ -91,15 +91,31 @@ async function runSetupWizard() {
   }
 
   // Detect Claude Code
-  const cliPath = process.argv[process.argv.indexOf('--claude-cli') + 1] || detectClaudeCode()
+  const cliArg = process.argv.includes('--claude-cli')
+    ? process.argv[process.argv.indexOf('--claude-cli') + 1]
+    : null
+  let cliPath = (cliArg && cliArg !== '' && cliArg !== '--os') ? cliArg : detectClaudeCode()
 
   if (!cliPath || !validateClaudeCode(cliPath)) {
-    console.log(chalk.red('\n✗ Claude Code CLI not found or not working\n'))
-    console.log(chalk.yellow('Claude Code is required. Install from: https://claude.com/download\n'))
-    process.exit(1)
+    console.log(chalk.yellow('⚠ Claude Code CLI not detected automatically\n'))
+    const claudePrompt = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'path',
+        message: 'Path to Claude Code CLI (leave empty to skip):',
+        default: '',
+      },
+    ])
+    if (claudePrompt.path && validateClaudeCode(claudePrompt.path)) {
+      cliPath = claudePrompt.path
+      console.log(chalk.green('✓ Claude Code detected\n'))
+    } else {
+      cliPath = claudePrompt.path || '/usr/local/bin/claude-code'
+      console.log(chalk.yellow('⚠ Claude Code not verified — you can configure it later in .env\n'))
+    }
+  } else {
+    console.log(chalk.green('✓ Claude Code detected\n'))
   }
-
-  console.log(chalk.green('✓ Claude Code detected\n'))
 
   // Configuration wizard
   console.log(chalk.cyan('━━━ Network Configuration ━━━\n'))

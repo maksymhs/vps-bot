@@ -132,7 +132,9 @@ echo ""
 echo -e "${CYAN}━━━ Initial Setup ━━━${NC}\n"
 
 # Run setup wizard
-node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS"
+if ! node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS"; then
+    echo -e "${RED}Setup wizard failed. You can run it later with: npm run setup${NC}"
+fi
 
 echo ""
 echo -e "${CYAN}━━━ Infrastructure Setup ━━━${NC}\n"
