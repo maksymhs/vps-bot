@@ -381,9 +381,14 @@ async function showConfig() {
     ? chalk.green(`${config.domain} (SSL)`)
     : chalk.green(`${config.ipAddress}:${config.port}`)
 
+  // Detect server IP
+  let serverIp = config.ipAddress || ''
+  try { serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim() } catch {}
+
   console.log(chalk.cyan('\nCurrent Configuration:\n'))
+  console.log(`  Server IP:   ${serverIp || chalk.gray('unknown')}`)
   console.log(`  Network:     ${net}`)
-  console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${config.ipAddress}:${config.codeServerPort}`}`)
+  console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`}`)
   console.log(`  Claude CLI:  ${config.claudeCli || chalk.gray('not set')}`)
   console.log(`  Telegram:    ${config.botToken ? chalk.green('configured') : chalk.gray('not set')}`)
   console.log(`  Projects:    ${config.projectsDir}`)
