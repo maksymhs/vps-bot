@@ -9,8 +9,8 @@ git clone https://<TOKEN>@github.com/maksymhs/vps-bot.git && cd vps-bot && bash 
 ```
 
 The installer automatically:
+- Installs Node.js, Docker, Caddy, Claude Code CLI, code-server (all as root)
 - Creates a `vpsbot` user (non-root, required by Claude Code)
-- Installs Node.js, Docker, Caddy, Claude Code CLI, code-server
 - Runs setup wizard (only asks for code-server password)
 - Auto-detects server IP
 - Creates systemd services (persist after SSH close)
@@ -128,7 +128,7 @@ Claude    Docker     Caddy
 
 ## Services & Persistence
 
-Everything runs as systemd services under the `vpsbot` user:
+Everything runs as systemd services (root for Docker access, `vpsbot` only for Claude Code):
 
 | Service | Description | Auto-start |
 |---------|-------------|------------|
@@ -141,45 +141,41 @@ Everything runs as systemd services under the `vpsbot` user:
 ## After Installation
 
 ```bash
-# Launch CLI dashboard
-su - vpsbot -c 'cd ~/vps-bot && npm start'
+# Launch CLI dashboard (as root)
+cd /root/vps-bot && npm start
 
-# Or switch to vpsbot user
-su - vpsbot
-cd ~/vps-bot
-npm start
+# Or from anywhere
+npm start --prefix /root/vps-bot
 ```
 
 ## Project Structure
 
 ```
-/home/vpsbot/
-├── vps-bot/                    # Platform code
-│   ├── src/
-│   │   ├── bot.js              # Telegram bot
-│   │   ├── cli.js              # CLI dashboard + config
-│   │   ├── cli-home.js         # Entry point
-│   │   ├── setup.js            # Setup wizard
-│   │   ├── commands/
-│   │   │   ├── projects.js     # Claude Code + Docker deploy
-│   │   │   ├── docker.js       # Container management
-│   │   │   └── menu.js         # Telegram UI
-│   │   └── lib/
-│   │       ├── config.js       # Environment config
-│   │       ├── code-server.js  # Code-Server management
-│   │       ├── docker-client.js
-│   │       ├── store.js        # Project state (JSON)
-│   │       └── caddy.js        # Caddy Admin API
-│   ├── install.sh              # One-command installer
-│   ├── bootstrap.sh            # Remote installer
-│   └── .env                    # Configuration (auto-generated)
-└── vps-code-bot-projects/      # Generated apps
-    ├── my-app/
-    │   ├── src/index.js
-    │   ├── package.json
-    │   ├── Dockerfile
-    │   └── docker-compose.yml
-    └── another-app/
+/root/vps-bot/                      # Platform code (runs as root)
+├── src/
+│   ├── bot.js                  # Telegram bot
+│   ├── cli.js                  # CLI dashboard + config
+│   ├── cli-home.js             # Entry point
+│   ├── setup.js                # Setup wizard
+│   ├── commands/
+│   │   ├── projects.js         # Claude Code (→ vpsbot) + Docker deploy
+│   │   ├── docker.js           # Container management
+│   │   └── menu.js             # Telegram UI
+│   └── lib/
+│       ├── config.js           # Environment config
+│       ├── docker-client.js
+│       ├── store.js            # Project state (JSON)
+│       └── caddy.js            # Caddy Admin API
+├── install.sh                  # One-command installer
+├── bootstrap.sh                # Remote installer
+└── .env                        # Configuration (auto-generated)
+
+/root/vps-code-bot-projects/        # Generated apps (owned by vpsbot)
+├── my-app/
+│   ├── src/index.js
+│   ├── Dockerfile
+│   └── docker-compose.yml
+└── another-app/
 ```
 
 ## Tech Stack
@@ -195,10 +191,10 @@ npm start
 
 ## Security
 
-- Runs as non-root `vpsbot` user
+- Main process runs as root (Docker needs it)
+- Claude Code runs as non-root `vpsbot` user (Claude Code requirement)
 - Bot token + passwords in `.env` (gitignored)
 - Single-user Telegram access via `CHAT_ID`
-- Docker socket restricted to `vpsbot` group
 - Apps isolated in Docker containers
 - HTTPS with auto-renewed Let's Encrypt certificates
 
@@ -212,9 +208,9 @@ docker ps                        # Check caddy-proxy + app containers
 docker logs caddy-proxy          # SSL/proxy issues
 
 # Reconfigure
-su - vpsbot -c 'cd ~/vps-bot && npm run setup'
+cd /root/vps-bot && npm run setup
 
-# Claude Code issues
+# Claude Code issues (runs as vpsbot user)
 su - vpsbot -c 'claude --version'
 su - vpsbot -c 'claude auth status'
 su - vpsbot -c 'claude login'
