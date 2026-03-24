@@ -81,7 +81,8 @@ async function showProjects() {
   const names = Object.keys(projects)
 
   if (!names.length) {
-    console.log(chalk.yellow('\nNo projects found.\n'))
+    console.log(chalk.yellow('\nNo projects yet. Use "Create New Project" to get started.\n'))
+    await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
     return showMainMenu()
   }
 
@@ -425,6 +426,7 @@ async function showStatus() {
     console.log(chalk.red(`\nError: ${err.message}\n`))
   }
 
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
   return showMainMenu()
 }
 
@@ -433,23 +435,23 @@ async function showContainers() {
     const containers = await getDocker().listContainers({ all: true })
 
     if (!containers.length) {
-      console.log(chalk.yellow('\nNo containers found.\n'))
-      return showMainMenu()
+      console.log(chalk.yellow('\nNo Docker containers running.\n'))
+    } else {
+      console.log(chalk.cyan('\nDocker Containers:\n'))
+      containers.forEach((c) => {
+        const name = c.Names[0].replace('/', '')
+        const statusStr = c.State === 'running' ? chalk.green('running') : chalk.red('stopped')
+        console.log(`  ${name}`)
+        console.log(`    Status: ${statusStr}`)
+        console.log(`    Image:  ${c.Image}`)
+        console.log('')
+      })
     }
-
-    console.log(chalk.cyan('\nDocker Containers:\n'))
-    containers.forEach((c) => {
-      const name = c.Names[0].replace('/', '')
-      const statusStr = c.State === 'running' ? chalk.green('running') : chalk.red('stopped')
-      console.log(`  ${name}`)
-      console.log(`    Status: ${statusStr}`)
-      console.log(`    Image:  ${c.Image}`)
-      console.log('')
-    })
   } catch (err) {
     console.log(chalk.red(`\nError: ${err.message}\n`))
   }
 
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
   return showMainMenu()
 }
 
