@@ -55,7 +55,6 @@ async function showMainMenu(clear = true) {
         { name: 'Docker Containers', value: 'containers' },
         new inquirer.Separator(chalk.gray('─────────────────')),
         { name: 'Configuration', value: 'config' },
-        { name: `View Logs (${log.file})`, value: 'logs' },
         { name: 'Exit', value: 'exit' },
       ],
     },
@@ -72,8 +71,6 @@ async function showMainMenu(clear = true) {
       return showContainers()
     case 'config':
       return showConfig()
-    case 'logs':
-      return showSystemLogs()
     case 'exit':
       console.log(chalk.gray('\nGoodbye.\n'))
       process.exit(0)
@@ -493,7 +490,8 @@ async function showConfig() {
   if (config.domain) {
     console.log(`  Domain:      ${chalk.green(config.domain)} (SSL)`)
   }
-  console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`}`)
+  const csUrl = config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`
+  console.log(`  Code-Server: ${csUrl} (pass: ${config.codeServerPassword})`)
 
   // Claude Code status
   let claudeStatus = chalk.gray('not installed')
@@ -529,6 +527,7 @@ async function showConfig() {
       ...(process.env.BOT_TOKEN ? [{ name: `${botRunning ? '🟢' : '🔴'} Telegram Bot (${botRunning ? 'running' : 'stopped'})`, value: 'bot' }] : []),
       { name: 'Change Code-Server Password', value: 'password' },
       new inquirer.Separator(),
+      { name: 'View System Logs', value: 'logs' },
       { name: 'Back', value: 'back' },
     ],
   }])
@@ -539,6 +538,7 @@ async function showConfig() {
   if (action === 'telegram') return configureTelegram()
   if (action === 'bot') return manageTelegramBot()
   if (action === 'password') return configurePassword()
+  if (action === 'logs') return showSystemLogs()
 }
 
 async function configureClaude() {
@@ -858,8 +858,27 @@ async function configurePassword() {
     validate: (input) => input && input.length >= 4 ? true : 'Min 4 characters',
   }])
 
+  // Update .env
   updateEnvVar('CODE_SERVER_PASSWORD', password)
-  console.log(chalk.green('\n✓ Password updated. Restart code-server to apply: pkill -f code-server && npm start\n'))
+
+  // Update code-server config.yaml (the actual file code-server reads)
+  const csConfigPath = join(process.env.HOME || '/root', '.config/code-server/config.yaml')
+  try {
+    let csConfig = readFileSync(csConfigPath, 'utf-8')
+    csConfig = csConfig.replace(/^password:.*$/m, `password: ${password}`)
+    writeFileSync(csConfigPath, csConfig)
+  } catch (err) {
+    console.log(chalk.yellow(`⚠ Could not update ${csConfigPath}: ${err.message}`))
+  }
+
+  // Restart code-server service
+  try {
+    execSync('systemctl restart code-server', { stdio: 'ignore' })
+    console.log(chalk.green('\n✓ Password updated and code-server restarted.\n'))
+  } catch {
+    console.log(chalk.green('\n✓ Password updated.'))
+    console.log(chalk.yellow('⚠ Could not restart code-server. Run: systemctl restart code-server\n'))
+  }
   return showConfig()
 }
 
