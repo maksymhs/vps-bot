@@ -104,6 +104,7 @@ async function runSetupWizard() {
     `NODE_BIN=${process.env.NODE_BIN || '/usr/bin/node'}`,
     'CODE_SERVER_PASSWORD=changeme',
     'CODE_SERVER_PORT=8080',
+    'CODE_SERVER_HTTPS_PORT=8443',
     'CADDY_ADMIN_URL=http://localhost:2019',
     'DOCKER_SOCKET=/var/run/docker.sock',
     '',
