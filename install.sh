@@ -319,16 +319,10 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}          Installation complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${CYAN}npm start${NC}      Launch main menu"
-echo -e "  ${CYAN}npm run cli${NC}    CLI dashboard"
-echo -e "  ${CYAN}npm run setup${NC}  Reconfigure"
-echo ""
 echo -e "  ${GREEN}Services persist after closing SSH!${NC}"
 echo -e "  ${GRAY}Claude Code runs as '${VPSBOT_USER}' user (non-root)${NC}"
 echo ""
 
-# Claude auth as last step — exec replaces this process so TTY works fully
-echo -e "${CYAN}━━━ Claude Code Authentication ━━━${NC}\n"
-echo -e "Last step: authenticate Claude Code for the '${VPSBOT_USER}' user."
-echo -e "A URL will appear — open it in your browser to log in.\n"
-exec sudo -u "$VPSBOT_USER" -i claude auth login
+# Launch main menu directly
+cd "$INSTALL_DIR"
+exec node src/cli-home.js
