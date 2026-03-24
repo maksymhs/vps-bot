@@ -272,6 +272,29 @@ async function rebuildProject(name) {
 }
 
 async function showNewProject() {
+  // Check Claude Code is available
+  let claudeOk = false
+  try {
+    execSync(`${config.claudeCli || 'claude'} --version`, { stdio: 'ignore' })
+    claudeOk = true
+  } catch {}
+
+  if (!claudeOk) {
+    console.log(chalk.red('\n⚠ Claude Code CLI not available.\n'))
+    const { action } = await inquirer.prompt([{
+      type: 'list',
+      name: 'action',
+      message: 'Claude Code is required to create projects:',
+      loop: false,
+      choices: [
+        { name: 'Configure Claude Code now', value: 'configure' },
+        { name: 'Back to menu', value: 'back' },
+      ],
+    }])
+    if (action === 'configure') return configureClaude()
+    return showMainMenu()
+  }
+
   const { name: rawName, description } = await inquirer.prompt([
     {
       type: 'input',
@@ -402,6 +425,7 @@ async function showConfig() {
     message: 'Configure:',
     loop: false,
     choices: [
+      { name: 'Configure Claude Code', value: 'claude' },
       { name: 'Set Custom Domain', value: 'domain' },
       { name: 'Set Telegram Bot', value: 'telegram' },
       { name: 'Change Code-Server Password', value: 'password' },
@@ -411,9 +435,73 @@ async function showConfig() {
   }])
 
   if (action === 'back') return showMainMenu()
+  if (action === 'claude') return configureClaude()
   if (action === 'domain') return configureDomain()
   if (action === 'telegram') return configureTelegram()
   if (action === 'password') return configurePassword()
+}
+
+async function configureClaude() {
+  // Check if already installed
+  let installed = false
+  try {
+    const ver = execSync('claude --version 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+    console.log(chalk.green(`\n✓ Claude Code CLI found: ${ver}\n`))
+    installed = true
+  } catch {
+    console.log(chalk.yellow('\nClaude Code CLI not found.\n'))
+  }
+
+  if (!installed) {
+    const { action } = await inquirer.prompt([{
+      type: 'list',
+      name: 'action',
+      message: 'Install Claude Code?',
+      loop: false,
+      choices: [
+        { name: 'Install now (npm install -g @anthropic-ai/claude-code)', value: 'install' },
+        { name: 'Set path manually', value: 'path' },
+        { name: 'Back', value: 'back' },
+      ],
+    }])
+
+    if (action === 'back') return showConfig()
+
+    if (action === 'install') {
+      console.log(chalk.yellow('\nInstalling Claude Code CLI...\n'))
+      try {
+        execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' })
+        const path = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+        updateEnvVar('CLAUDE_CLI', path)
+        console.log(chalk.green(`\n✓ Installed: ${path}\n`))
+      } catch (err) {
+        console.log(chalk.red(`\n✗ Installation failed: ${err.message}\n`))
+      }
+      return showConfig()
+    }
+
+    if (action === 'path') {
+      const { path } = await inquirer.prompt([{
+        type: 'input',
+        name: 'path',
+        message: 'Full path to Claude Code CLI:',
+      }])
+      if (path) {
+        updateEnvVar('CLAUDE_CLI', path)
+        console.log(chalk.green(`\n✓ Claude CLI set to: ${path}\n`))
+      }
+      return showConfig()
+    }
+  } else {
+    // Already installed, just update path in .env
+    try {
+      const path = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+      updateEnvVar('CLAUDE_CLI', path)
+      console.log(chalk.green(`✓ Path saved: ${path}\n`))
+    } catch {}
+  }
+
+  return showConfig()
 }
 
 async function configureDomain() {
