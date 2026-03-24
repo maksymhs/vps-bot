@@ -84,17 +84,20 @@ else
     echo -e "${GREEN}✓ Caddy $(caddy version 2>/dev/null | head -1 || echo 'installed')${NC}"
 fi
 
-# Check Claude Code (don't install, just detect)
-echo -n "  Claude Code: "
-if command -v claude-code &> /dev/null; then
-    echo -e "${GREEN}✓ detected${NC}"
-    CLAUDE_CLI=$(command -v claude-code)
-elif [ -f "$HOME/.local/share/code-server/extensions/anthropic.claude-code-*/resources/claude-code/cli.js" ]; then
-    echo -e "${GREEN}✓ detected${NC}"
-    CLAUDE_CLI=$(find "$HOME/.local/share/code-server/extensions" -name "cli.js" -path "*/claude-code/*" 2>/dev/null | head -1)
+# Check and install Claude Code CLI
+if command -v claude &> /dev/null; then
+    echo -e "${GREEN}✓ Claude Code CLI $(claude --version 2>/dev/null || echo 'installed')${NC}"
+    CLAUDE_CLI=$(command -v claude)
 else
-    echo -e "${YELLOW}⚠ not found (required)${NC}"
-    CLAUDE_CLI=""
+    echo -e "${YELLOW}Claude Code CLI not found. Installing...${NC}"
+    npm install -g @anthropic-ai/claude-code
+    if command -v claude &> /dev/null; then
+        echo -e "${GREEN}✓ Claude Code CLI installed${NC}"
+        CLAUDE_CLI=$(command -v claude)
+    else
+        echo -e "${YELLOW}⚠ Claude Code CLI installation failed. Install manually: npm install -g @anthropic-ai/claude-code${NC}"
+        CLAUDE_CLI=""
+    fi
 fi
 
 echo ""

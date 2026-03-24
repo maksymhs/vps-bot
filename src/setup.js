@@ -53,12 +53,18 @@ function detectClaudeCode(providedPath) {
     return providedPath
   }
 
+  // Try to find 'claude' command (npm global install)
+  try {
+    const which = execSync('which claude 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'] })
+    const p = which.toString().trim()
+    if (p) return p
+  } catch {}
+
   // Check various common locations
   const paths = [
     process.env.CLAUDE_CLI,
+    '/usr/local/bin/claude',
     '/usr/local/bin/claude-code',
-    `${process.env.HOME}/.local/share/code-server/extensions/anthropic.claude-code-*/resources/claude-code/cli.js`,
-    '/opt/code-server/lib/vscode-server/extensions/anthropic.claude-code-*/resources/claude-code/cli.js',
   ]
 
   for (const path of paths) {
@@ -66,15 +72,6 @@ function detectClaudeCode(providedPath) {
   }
 
   return null
-}
-
-function validateClaudeCode(path) {
-  try {
-    execSync(`node "${path}" --version`, { stdio: 'pipe' })
-    return true
-  } catch {
-    return false
-  }
 }
 
 async function runSetupWizard() {
@@ -100,31 +97,17 @@ async function runSetupWizard() {
     }
   }
 
-  // Detect Claude Code
+  // Detect Claude Code (installed by install.sh or already present)
   const cliArg = process.argv.includes('--claude-cli')
     ? process.argv[process.argv.indexOf('--claude-cli') + 1]
     : null
   let cliPath = (cliArg && cliArg !== '' && cliArg !== '--os') ? cliArg : detectClaudeCode()
 
-  if (!cliPath || !validateClaudeCode(cliPath)) {
-    console.log(chalk.yellow('⚠ Claude Code CLI not detected automatically\n'))
-    const claudePrompt = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'path',
-        message: 'Path to Claude Code CLI (leave empty to skip):',
-        default: '',
-      },
-    ])
-    if (claudePrompt.path && validateClaudeCode(claudePrompt.path)) {
-      cliPath = claudePrompt.path
-      console.log(chalk.green('✓ Claude Code detected\n'))
-    } else {
-      cliPath = claudePrompt.path || '/usr/local/bin/claude-code'
-      console.log(chalk.yellow('⚠ Claude Code not verified — you can configure it later in .env\n'))
-    }
+  if (cliPath) {
+    console.log(chalk.green(`✓ Claude Code CLI: ${cliPath}\n`))
   } else {
-    console.log(chalk.green('✓ Claude Code detected\n'))
+    cliPath = 'claude'
+    console.log(chalk.yellow('⚠ Claude Code CLI not found — install later: npm install -g @anthropic-ai/claude-code\n'))
   }
 
   // Configuration wizard
