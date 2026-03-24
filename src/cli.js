@@ -443,6 +443,8 @@ async function configureDomain() {
     try { execSync('pkill -f code-server', { stdio: 'ignore' }) } catch {}
 
     const steps = [
+      { name: 'Stop system Caddy', cmd: 'sudo systemctl stop caddy 2>/dev/null || true && sudo systemctl disable caddy 2>/dev/null || true' },
+      { name: 'Free ports 80/443', cmd: 'sudo fuser -k 80/tcp 2>/dev/null || true && sudo fuser -k 443/tcp 2>/dev/null || true' },
       { name: 'Create Docker network', cmd: 'docker network create caddy 2>/dev/null || true' },
       { name: 'Remove old caddy-proxy', cmd: 'docker rm -f caddy-proxy 2>/dev/null || true' },
       { name: 'Pull caddy-docker-proxy', cmd: 'docker pull lucaslorentz/caddy-docker-proxy:ci-alpine' },
