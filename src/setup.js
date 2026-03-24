@@ -38,6 +38,16 @@ function isValidPort(port) {
   return num > 0 && num < 65536
 }
 
+function detectIpAddress() {
+  try {
+    // Try to get the public/primary IP
+    const result = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] })
+    const ip = result.toString().trim()
+    if (ip && isValidIp(ip)) return ip
+  } catch {}
+  return null
+}
+
 function detectClaudeCode(providedPath) {
   if (providedPath && existsSync(providedPath)) {
     return providedPath
@@ -160,32 +170,29 @@ async function runSetupWizard() {
     ])
     domain = domainConfig.domain
   } else {
-    const ipConfig = await inquirer.prompt([
-      {
+    // Auto-detect VPS IP
+    const detectedIp = detectIpAddress()
+    if (detectedIp) {
+      console.log(chalk.green(`✓ Detected IP: ${detectedIp}\n`))
+      ipAddress = detectedIp
+    } else {
+      const ipInput = await inquirer.prompt([{
         type: 'input',
         name: 'ip',
-        message: 'Enter server IP address:',
-        default: 'localhost',
-        validate: (input) => {
-          if (!input) return 'IP is required'
-          if (input !== 'localhost' && !isValidIp(input)) return 'Invalid IP format'
-          return true
-        },
-      },
-      {
-        type: 'input',
-        name: 'port',
-        message: 'Enter port (if IP, recommend 8080+):',
-        default: '80',
-        validate: (input) => {
-          if (!input) return 'Port is required'
-          if (!isValidPort(input)) return 'Invalid port (1-65535)'
-          return true
-        },
-      },
-    ])
-    ipAddress = ipConfig.ip
-    port = ipConfig.port
+        message: 'Could not detect IP. Enter server IP:',
+        validate: (input) => input && isValidIp(input) ? true : 'Invalid IP',
+      }])
+      ipAddress = ipInput.ip
+    }
+
+    const portConfig = await inquirer.prompt([{
+      type: 'input',
+      name: 'port',
+      message: 'Base port for apps:',
+      default: '80',
+      validate: (input) => isValidPort(input) ? true : 'Invalid port (1-65535)',
+    }])
+    port = portConfig.port
   }
 
   // Code-Server configuration
