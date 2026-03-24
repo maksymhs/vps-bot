@@ -272,27 +272,75 @@ async function rebuildProject(name) {
 }
 
 async function showNewProject() {
-  // Check Claude Code is available
-  let claudeOk = false
+  // Step 1: Check Claude Code is installed
+  let claudeInstalled = false
   try {
     execSync(`${config.claudeCli || 'claude'} --version`, { stdio: 'ignore' })
-    claudeOk = true
+    claudeInstalled = true
   } catch {}
 
-  if (!claudeOk) {
-    console.log(chalk.red('\n⚠ Claude Code CLI not available.\n'))
+  if (!claudeInstalled) {
+    console.log(chalk.red('\n⚠ Claude Code CLI not installed.\n'))
     const { action } = await inquirer.prompt([{
       type: 'list',
       name: 'action',
       message: 'Claude Code is required to create projects:',
       loop: false,
       choices: [
-        { name: 'Configure Claude Code now', value: 'configure' },
+        { name: 'Install & configure Claude Code', value: 'install' },
         { name: 'Back to menu', value: 'back' },
       ],
     }])
-    if (action === 'configure') return configureClaude()
-    return showMainMenu()
+    if (action === 'install') {
+      console.log(chalk.yellow('\nInstalling Claude Code CLI...\n'))
+      try {
+        execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' })
+        try {
+          const cliPath = execSync('which claude', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+          updateEnvVar('CLAUDE_CLI', cliPath)
+        } catch {}
+        claudeInstalled = true
+      } catch {
+        console.log(chalk.red('\n✗ Installation failed.\n'))
+        return showMainMenu()
+      }
+    } else {
+      return showMainMenu()
+    }
+  }
+
+  // Step 2: Check Claude Code is logged in
+  let claudeLoggedIn = false
+  try {
+    execSync('claude auth status', { stdio: 'ignore' })
+    claudeLoggedIn = true
+  } catch {}
+
+  if (!claudeLoggedIn) {
+    console.log(chalk.yellow('\n⚠ Claude Code not logged in. You need to authenticate first.\n'))
+    const { action } = await inquirer.prompt([{
+      type: 'list',
+      name: 'action',
+      message: 'Login to Claude:',
+      loop: false,
+      choices: [
+        { name: 'Login now (opens auth URL)', value: 'login' },
+        { name: 'Back to menu', value: 'back' },
+      ],
+    }])
+    if (action === 'login') {
+      try {
+        execSync('claude login', { stdio: 'inherit' })
+        // Verify login worked
+        execSync('claude auth status', { stdio: 'ignore' })
+        console.log(chalk.green('\n✓ Claude authenticated!\n'))
+      } catch {
+        console.log(chalk.red('\n✗ Login failed or cancelled. Cannot create project without authentication.\n'))
+        return showMainMenu()
+      }
+    } else {
+      return showMainMenu()
+    }
   }
 
   const { name: rawName, description } = await inquirer.prompt([
