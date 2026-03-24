@@ -122,8 +122,9 @@ networks:
   } else {
     // IP mode: expose port directly on host
     const port = store.get(name)?.port || getNextPort()
-    // Save port to store so it persists across rebuilds
-    store.set(name, { port })
+    // Save port + URL to store early so it's available even if deploy fails later
+    const url = `http://${config.ipAddress || 'localhost'}:${port}`
+    store.set(name, { port, url })
     compose = `services:
   app:
     build: .

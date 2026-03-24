@@ -159,7 +159,8 @@ async function showProjectMenu(name) {
 
     if (action === 'back') return showProjects()
     if (action === 'url') {
-      console.log(chalk.gray(`\n${project.url}\n`))
+      const url = project.url || (project.port ? `http://${config.ipAddress || 'localhost'}:${project.port}` : '(no URL)')
+      console.log(chalk.gray(`\n${url}\n`))
       return showProjectMenu(name)
     }
     if (action === 'logs') {
@@ -421,8 +422,10 @@ async function showNewProject() {
     const ok = await deployNew(cliCtx, name, description, model)
     buildingSet.delete(name)
     if (ok) {
+      const p = store.get(name)
+      const url = p?.url || (p?.port ? `http://${config.ipAddress || 'localhost'}:${p.port}` : '')
       console.log(chalk.green(`\n${name} created successfully!`))
-      console.log(chalk.gray(`URL: ${config.projectUrl(name)}\n`))
+      if (url) console.log(chalk.gray(`URL: ${url}\n`))
     }
   } catch (err) {
     buildingSet.delete(name)
@@ -889,7 +892,19 @@ async function main() {
   await showMainMenu()
 }
 
+process.on('uncaughtException', (err) => {
+  log.error('[CRASH] uncaughtException', err.stack || err.message)
+  console.error(chalk.red(`\nCrash: ${err.message}`))
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.error('[CRASH] unhandledRejection', String(reason))
+  console.error(chalk.red(`\nUnhandled rejection: ${reason}`))
+})
+
 main().catch((err) => {
+  log.error('[CRASH] main()', err.stack || err.message)
   console.error(chalk.red('Error:'), err.message)
   process.exit(1)
 })
