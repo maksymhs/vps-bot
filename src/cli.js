@@ -12,7 +12,12 @@ import inquirer from 'inquirer'
 import si from 'systeminformation'
 import chalk from 'chalk'
 import { execFile, spawn } from 'child_process'
-import { mkdirSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const envFile = join(dirname(__dirname), '.env')
 
 // CLI context that mimics Telegram bot context for reusing deploy functions
 const cliCtx = {
@@ -41,8 +46,8 @@ async function showMainMenu() {
       type: 'list',
       name: 'action',
       message: 'Navigation',
+      loop: false,
       choices: [
-        new inquirer.Separator(chalk.gray('─────────────────')),
         { name: 'View Projects', value: 'list' },
         { name: 'Create New Project', value: 'new' },
         { name: 'Server Status', value: 'status' },
@@ -85,6 +90,7 @@ async function showProjects() {
       type: 'list',
       name: 'name',
       message: 'Select a project:',
+      loop: false,
       choices: [...names, new inquirer.Separator(), 'Back'],
     },
   ])
@@ -116,6 +122,7 @@ async function showProjectMenu(name) {
         type: 'list',
         name: 'action',
         message: `Project: ${name}`,
+        loop: false,
         choices: [
           { name: 'View Logs', value: 'logs' },
           ...(status === 'running'
@@ -369,15 +376,115 @@ async function showContainers() {
   return showMainMenu()
 }
 
-function showConfig() {
-  console.log(chalk.cyan('\nSystem Configuration:\n'))
-  console.log(`  Domain:            ${config.domain}`)
-  console.log(`  Projects Dir:      ${config.projectsDir}`)
-  console.log(`  Caddy Admin:       ${config.caddyAdminUrl}`)
-  console.log(`  Claude CLI:        ${config.claudeCli}`)
+async function showConfig() {
+  const net = config.domain
+    ? chalk.green(`${config.domain} (SSL)`)
+    : chalk.green(`${config.ipAddress}:${config.port}`)
+
+  console.log(chalk.cyan('\nCurrent Configuration:\n'))
+  console.log(`  Network:     ${net}`)
+  console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${config.ipAddress}:${config.codeServerPort}`}`)
+  console.log(`  Claude CLI:  ${config.claudeCli || chalk.gray('not set')}`)
+  console.log(`  Telegram:    ${config.botToken ? chalk.green('configured') : chalk.gray('not set')}`)
+  console.log(`  Projects:    ${config.projectsDir}`)
   console.log('')
 
-  return showMainMenu()
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: 'Configure:',
+    loop: false,
+    choices: [
+      { name: 'Set Custom Domain', value: 'domain' },
+      { name: 'Set Telegram Bot', value: 'telegram' },
+      { name: 'Change Code-Server Password', value: 'password' },
+      new inquirer.Separator(),
+      { name: 'Back', value: 'back' },
+    ],
+  }])
+
+  if (action === 'back') return showMainMenu()
+  if (action === 'domain') return configureDomain()
+  if (action === 'telegram') return configureTelegram()
+  if (action === 'password') return configurePassword()
+}
+
+async function configureDomain() {
+  const { domain } = await inquirer.prompt([{
+    type: 'input',
+    name: 'domain',
+    message: 'Enter domain (e.g. maksym.site) or leave empty to use IP:',
+    default: config.domain || '',
+  }])
+
+  updateEnvVar('DOMAIN', domain)
+  if (domain) {
+    updateEnvVar('IP_ADDRESS', '', true)
+    console.log(chalk.green(`\n✓ Domain set to ${domain}`))
+    console.log(chalk.gray('  Run install.sh again to configure Caddy SSL\n'))
+  } else {
+    updateEnvVar('DOMAIN', '', true)
+    const ip = config.ipAddress || 'localhost'
+    updateEnvVar('IP_ADDRESS', ip)
+    console.log(chalk.green(`\n✓ Switched to IP mode (${ip})\n`))
+  }
+  return showConfig()
+}
+
+async function configureTelegram() {
+  const { token } = await inquirer.prompt([{
+    type: 'input',
+    name: 'token',
+    message: 'Telegram Bot Token (from @BotFather):',
+    default: config.botToken || '',
+  }])
+
+  if (!token) {
+    updateEnvVar('BOT_TOKEN', '', true)
+    updateEnvVar('CHAT_ID', '', true)
+    console.log(chalk.gray('\nTelegram disabled.\n'))
+    return showConfig()
+  }
+
+  const { chatId } = await inquirer.prompt([{
+    type: 'input',
+    name: 'chatId',
+    message: 'Your Telegram Chat ID:',
+    default: config.chatId?.toString() || '',
+    validate: (input) => /^-?\d+$/.test(input) ? true : 'Must be a number',
+  }])
+
+  updateEnvVar('BOT_TOKEN', token)
+  updateEnvVar('CHAT_ID', chatId)
+  console.log(chalk.green('\n✓ Telegram configured\n'))
+  return showConfig()
+}
+
+async function configurePassword() {
+  const { password } = await inquirer.prompt([{
+    type: 'input',
+    name: 'password',
+    message: 'New Code-Server password:',
+    validate: (input) => input && input.length >= 4 ? true : 'Min 4 characters',
+  }])
+
+  updateEnvVar('CODE_SERVER_PASSWORD', password)
+  console.log(chalk.green('\n✓ Password updated. Restart code-server to apply: pkill -f code-server && npm start\n'))
+  return showConfig()
+}
+
+function updateEnvVar(key, value, comment = false) {
+  try {
+    let content = readFileSync(envFile, 'utf-8')
+    const regex = new RegExp(`^#?\\s*${key}=.*$`, 'm')
+    const newLine = comment ? `# ${key}=` : `${key}=${value}`
+    if (regex.test(content)) {
+      content = content.replace(regex, newLine)
+    } else {
+      content += `\n${newLine}\n`
+    }
+    writeFileSync(envFile, content)
+  } catch {}
 }
 
 async function main() {
