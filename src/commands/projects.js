@@ -1,5 +1,5 @@
 import { execFile, execSync, spawn } from 'child_process'
-import { mkdirSync, writeFileSync, existsSync, rmSync, unlinkSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
 import { getDocker } from '../lib/docker-client.js'
 import { buildingSet } from '../lib/build-state.js'
@@ -21,7 +21,7 @@ function projectUrl(name) {
   const project = store.get(name)
   const port = project?.port
   const ip = config.ipAddress || 'localhost'
-  return port ? `https://${ip}:${port}` : `https://${ip}`
+  return port ? `http://${ip}:${port}` : `http://${ip}`
 }
 
 function run(cmd, args, opts = {}) {
@@ -101,31 +101,6 @@ function getNextPort() {
   return port
 }
 
-const CADDY_SITES_DIR = '/etc/caddy/sites'
-
-function writeCaddySite(name, port) {
-  const internalPort = port + 10000
-  const ip = config.ipAddress || 'localhost'
-  const siteConfig = `https://${ip}:${port} {
-    tls internal
-    reverse_proxy 127.0.0.1:${internalPort}
-}
-`
-  mkdirSync(CADDY_SITES_DIR, { recursive: true })
-  writeFileSync(join(CADDY_SITES_DIR, `${name}.caddy`), siteConfig)
-  try {
-    execSync('systemctl reload caddy', { stdio: 'pipe' })
-  } catch (err) {
-    log.error(`[${name}] caddy reload failed`, err.message)
-  }
-}
-
-function removeCaddySite(name) {
-  try {
-    unlinkSync(join(CADDY_SITES_DIR, `${name}.caddy`))
-    execSync('systemctl reload caddy', { stdio: 'pipe' })
-  } catch { /* ignore */ }
-}
 
 function writeComposeFile(dir, name) {
   let compose
@@ -146,17 +121,16 @@ networks:
     external: true
 `
   } else {
-    // IP mode: bind to localhost only, Caddy handles HTTPS on the public port
+    // IP mode: expose port directly on host (HTTP)
     const port = store.get(name)?.port || getNextPort()
-    const internalPort = port + 10000
-    const url = `https://${config.ipAddress || 'localhost'}:${port}`
+    const url = `http://${config.ipAddress || 'localhost'}:${port}`
     store.set(name, { port, url })
     compose = `services:
   app:
     build: .
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${internalPort}:3000"
+      - "${port}:3000"
 `
   }
   writeFileSync(join(dir, 'docker-compose.yml'), compose)
@@ -622,26 +596,16 @@ CMD ["npm", "start"]`
     throw err
   }
 
-  // In IP mode, create Caddy HTTPS site for this project
-  if (!config.domain) {
-    const project = store.get(name)
-    if (project?.port) {
-      await onStatus('🔒 Configurando HTTPS...')
-      writeCaddySite(name, project.port)
-      log.info(`[${name}] caddy site created for port ${project.port}`)
-    }
-  }
-
   await onStatus('🔍 Verificando que arranca...')
 
-  // In IP mode, check via localhost:internalPort; in domain mode, use container IP:3000
+  // In IP mode, check via localhost:mappedPort; in domain mode, use container IP:3000
   const project = store.get(name)
   let healthHost, healthPort
   log.info(`[${name}] health check setup`, `domain=${config.domain || 'none'} project.port=${project?.port}`)
 
   if (!config.domain && project?.port) {
     healthHost = '127.0.0.1'
-    healthPort = project.port + 10000
+    healthPort = project.port
   } else {
     const ip = await getContainerIp(name)
     log.info(`[${name}] container IP: ${ip || 'null'}`)
@@ -891,7 +855,6 @@ export async function deleteProjectCommand(ctx) {
 
   try {
     await dockerComposeDown(dir)
-    if (!config.domain) removeCaddySite(name)
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
     store.delete(name)
 

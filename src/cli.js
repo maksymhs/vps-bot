@@ -156,7 +156,7 @@ async function showProjectMenu(name) {
 
     if (action === 'back') return showProjects()
     if (action === 'url') {
-      const url = project.url || (project.port ? `https://${config.ipAddress || 'localhost'}:${project.port}` : '(no URL)')
+      const url = project.url || (project.port ? `http://${config.ipAddress || 'localhost'}:${project.port}` : '(no URL)')
       console.log(chalk.gray(`\n${url}\n`))
       return showProjectMenu(name)
     }
@@ -420,7 +420,7 @@ async function showNewProject() {
     buildingSet.delete(name)
     if (ok) {
       const p = store.get(name)
-      const url = p?.url || (p?.port ? `https://${config.ipAddress || 'localhost'}:${p.port}` : '')
+      const url = p?.url || (p?.port ? `http://${config.ipAddress || 'localhost'}:${p.port}` : '')
       console.log(chalk.green(`\n${name} created successfully!`))
       if (url) console.log(chalk.gray(`URL: ${url}\n`))
     }
@@ -490,8 +490,7 @@ async function showConfig() {
   if (config.domain) {
     console.log(`  Domain:      ${chalk.green(config.domain)} (SSL)`)
   }
-  const csHttpsPort = process.env.CODE_SERVER_HTTPS_PORT || 8443
-  const csUrl = config.domain ? `https://code.${config.domain}` : `https://${serverIp || config.ipAddress}:${csHttpsPort}`
+  const csUrl = config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`
   console.log(`  Code-Server: ${csUrl} (pass: ${config.codeServerPassword})`)
 
   // Claude Code status
@@ -685,32 +684,21 @@ async function configureDomain() {
     const ip = config.ipAddress || 'localhost'
     updateEnvVar('IP_ADDRESS', ip)
 
-    // Stop caddy-proxy, set up Caddy systemd with TLS for IP mode
+    // Stop caddy-proxy, rebind code-server to 0.0.0.0
     execSync('docker rm -f caddy-proxy 2>/dev/null || true')
-    const csPort = config.codeServerPort || 8080
-    const csHttpsPort = process.env.CODE_SERVER_HTTPS_PORT || 8443
-
-    // Caddy base config + code-server site
-    execSync('mkdir -p /etc/caddy/sites')
-    writeFileSync('/etc/caddy/Caddyfile',
-      `{\n    auto_https disable_redirects\n}\n\nimport /etc/caddy/sites/*.caddy\n`)
-    writeFileSync(`/etc/caddy/sites/code-server.caddy`,
-      `https://${ip}:${csHttpsPort} {\n    tls internal\n    reverse_proxy 127.0.0.1:${csPort}\n}\n`)
-
-    // Code-server binds to localhost only
+    execSync('systemctl stop caddy 2>/dev/null; systemctl disable caddy 2>/dev/null || true')
     execSync('pkill -f code-server 2>/dev/null || true')
+    const csPort = config.codeServerPort || 8080
     const csConfigDir = `${process.env.HOME}/.config/code-server`
     execSync(`mkdir -p ${csConfigDir}`)
     writeFileSync(join(csConfigDir, 'config.yaml'),
-      `bind-addr: 127.0.0.1:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
-
-    execSync('systemctl enable caddy 2>/dev/null; systemctl restart caddy 2>/dev/null || true')
+      `bind-addr: 0.0.0.0:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
     spawn('code-server', ['--disable-telemetry', config.projectsDir], {
       detached: true, stdio: 'ignore',
     }).unref()
 
     console.log(chalk.green(`\n✓ Switched to IP mode`))
-    console.log(chalk.green(`✓ Code-Server: https://${ip}:${csHttpsPort}\n`))
+    console.log(chalk.green(`✓ Code-Server: http://${ip}:${csPort}\n`))
   }
 
   console.log()

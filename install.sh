@@ -218,15 +218,14 @@ if ! docker network ls --format '{{.Name}}' | grep -qx 'caddy'; then
     run_silent "Docker network 'caddy'" docker network create caddy
 fi
 
-# HTTPS setup
+# Network setup
 CS_PORT="${CODE_SERVER_PORT:-8080}"
-CS_HTTPS_PORT="${CODE_SERVER_HTTPS_PORT:-8443}"
 NODE_BIN=$(which node)
 PROJECTS_DIR="${PROJECTS_DIR:-/home/vpsbot/projects}"
 mkdir -p "$PROJECTS_DIR"
 
 if [ -n "$DOMAIN" ]; then
-    # Domain mode: Caddy Docker proxy with Let's Encrypt
+    # Domain mode: Caddy Docker proxy with Let's Encrypt (HTTPS)
     systemctl stop caddy 2>/dev/null || true
     systemctl disable caddy 2>/dev/null || true
     docker rm -f caddy-proxy 2>/dev/null || true
@@ -244,40 +243,22 @@ if [ -n "$DOMAIN" ]; then
         --add-host host.docker.internal:host-gateway \
         lucaslorentz/caddy-docker-proxy:ci-alpine
 else
-    # IP mode: Caddy systemd with self-signed TLS for all services
+    # IP mode: direct HTTP (no Caddy needed)
+    systemctl stop caddy 2>/dev/null || true
+    systemctl disable caddy 2>/dev/null || true
     docker rm -f caddy-proxy 2>/dev/null || true
-    mkdir -p /etc/caddy/sites
-
-    cat > /etc/caddy/Caddyfile << 'CADDYEOF'
-{
-    auto_https disable_redirects
-}
-
-import /etc/caddy/sites/*.caddy
-CADDYEOF
-
-    # Code-server HTTPS site — must use https://IP for Caddy to serve TLS
-    SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-    cat > /etc/caddy/sites/code-server.caddy << EOF
-https://${SERVER_IP}:${CS_HTTPS_PORT} {
-    tls internal
-    reverse_proxy 127.0.0.1:${CS_PORT}
-}
-EOF
-
-    systemctl enable caddy > /dev/null 2>&1
-    systemctl restart caddy > /dev/null 2>&1
-    log "Caddy systemd started (IP mode with TLS)"
 fi
 
 # Code-Server service
 if command -v code-server &> /dev/null; then
-    # Always bind to localhost — Caddy handles public access with HTTPS
     CS_PASS="${CODE_SERVER_PASSWORD:-changeme}"
+    # Domain mode: localhost only (Caddy proxies). IP mode: public.
+    CS_BIND="0.0.0.0:${CS_PORT}"
+    [ -n "$DOMAIN" ] && CS_BIND="127.0.0.1:${CS_PORT}"
 
     mkdir -p "$HOME/.config/code-server"
     cat > "$HOME/.config/code-server/config.yaml" << EOF
-bind-addr: 127.0.0.1:${CS_PORT}
+bind-addr: ${CS_BIND}
 auth: password
 password: ${CS_PASS}
 cert: false
@@ -308,7 +289,7 @@ EOF
         if [ -n "$DOMAIN" ]; then
             echo -e "  ${GREEN}✔${NC} Code-Server → ${CYAN}https://code.${DOMAIN}${NC}"
         else
-            echo -e "  ${GREEN}✔${NC} Code-Server → ${CYAN}https://${IP_DISPLAY}:${CS_HTTPS_PORT}${NC}"
+            echo -e "  ${GREEN}✔${NC} Code-Server → ${CYAN}http://${IP_DISPLAY}:${CS_PORT}${NC}"
         fi
     fi
 fi
