@@ -600,11 +600,14 @@ CMD ["npm", "start"]`
   // In IP mode, check via localhost:mappedPort; in domain mode, use container IP:3000
   const project = store.get(name)
   let healthHost, healthPort
+  log.info(`[${name}] health check setup`, `domain=${config.domain || 'none'} project.port=${project?.port}`)
+
   if (!config.domain && project?.port) {
     healthHost = '127.0.0.1'
     healthPort = project.port
   } else {
     const ip = await getContainerIp(name)
+    log.info(`[${name}] container IP: ${ip || 'null'}`)
     if (!ip) {
       const logs = await getContainerLogs(name)
       log.error(`[${name}] container has no IP`, logs)
@@ -614,6 +617,7 @@ CMD ["npm", "start"]`
     healthPort = 3000
   }
 
+  log.info(`[${name}] polling health at ${healthHost}:${healthPort}`)
   await onStatus(`🔄 Esperando respuesta HTTP en ${healthHost}:${healthPort}...`)
 
   const onHealthProgress = async (msg) => {
@@ -623,7 +627,7 @@ CMD ["npm", "start"]`
   const healthy = await pollHealth(healthHost, healthPort, 40_000, onHealthProgress)
   if (!healthy) {
     const logs = await getContainerLogs(name)
-    log.error(`[${name}] health check failed`, logs)
+    log.error(`[${name}] health check failed after 40s`, logs)
     throw new Error(`App no responde en 40s.\n${logs.slice(-800)}`)
   }
 
