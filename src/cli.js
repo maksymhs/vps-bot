@@ -386,9 +386,7 @@ async function main() {
     process.exit(1)
   }
 
-  while (true) {
-    await showMainMenu()
-  }
+  await showMainMenu()
 }
 
 main().catch((err) => {
