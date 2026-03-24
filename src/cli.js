@@ -276,7 +276,7 @@ async function showNewProject() {
   // Step 1: Check Claude Code is installed
   let claudeInstalled = false
   try {
-    execSync(`${config.claudeCli || 'claude'} --version`, { stdio: 'ignore' })
+    execSync(`${config.claudeCli || 'claude'} --version`, { stdio: 'ignore', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
     claudeInstalled = true
   } catch {}
 
@@ -313,7 +313,7 @@ async function showNewProject() {
   // Step 2: Check Claude Code is logged in
   let claudeLoggedIn = false
   try {
-    execSync('claude auth status', { stdio: 'ignore' })
+    execSync('claude auth status', { stdio: 'ignore', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
     claudeLoggedIn = true
   } catch {}
 
@@ -331,9 +331,9 @@ async function showNewProject() {
     }])
     if (action === 'login') {
       try {
-        execSync('claude login', { stdio: 'inherit' })
+        execSync('claude login', { stdio: 'inherit', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
         // Verify login worked
-        execSync('claude auth status', { stdio: 'ignore' })
+        execSync('claude auth status', { stdio: 'ignore', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
         console.log(chalk.green('\n✓ Claude authenticated!\n'))
       } catch {
         console.log(chalk.red('\n✗ Login failed or cancelled. Cannot create project without authentication.\n'))
@@ -474,9 +474,9 @@ async function showConfig() {
   // Claude Code status
   let claudeStatus = chalk.gray('not installed')
   try {
-    execSync('claude --version', { stdio: 'ignore' })
+    execSync('claude --version', { stdio: 'ignore', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
     try {
-      execSync('claude auth status', { stdio: 'ignore' })
+      execSync('claude auth status', { stdio: 'ignore', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
       claudeStatus = chalk.green('logged in')
     } catch {
       claudeStatus = chalk.yellow('installed (not logged in)')
@@ -513,7 +513,7 @@ async function configureClaude() {
   // Check if installed
   let installed = false
   try {
-    const ver = execSync('claude --version 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+    const ver = execSync('claude --version 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } }).toString().trim()
     console.log(chalk.green(`\n✓ Claude Code CLI: ${ver}\n`))
     installed = true
   } catch {
@@ -567,7 +567,7 @@ async function configureClaude() {
   if (doLogin) {
     console.log(chalk.cyan('\nLaunching Claude login... Follow the URL to authenticate.\n'))
     try {
-      execSync('claude login', { stdio: 'inherit' })
+      execSync('claude login', { stdio: 'inherit', env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
       console.log(chalk.green('\n✓ Claude authenticated!\n'))
     } catch {
       console.log(chalk.yellow('\nLogin cancelled or failed. You can login later: claude login\n'))

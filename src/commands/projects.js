@@ -30,9 +30,9 @@ function run(cmd, args, opts = {}) {
 
 // Versión con streaming de output
 function runWithStreaming(cmd, args, opts = {}) {
-  const { onData, timeout = 300_000, cwd } = opts
+  const { onData, timeout = 300_000, cwd, env } = opts
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(cmd, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
     let output = ''
     let pendingCallbacks = 0
     let childClosed = false
@@ -169,7 +169,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   }
 
   try {
-    await run(config.nodeBin, [config.claudeCli, '-p', prompt, '--dangerously-skip-permissions', '--model', model], { cwd: dir })
+    await run(config.claudeCli || 'claude', ['-p', prompt, '--dangerously-skip-permissions', '--model', model], { cwd: dir, env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
     // Registrar uso de Claude
     try {
       recordClaudeCall(Math.round(prompt.length / 4)) // Estima tokens (aprox 1 token por 4 chars)
@@ -231,8 +231,9 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
   const lines = []
   let lastUpdate = Date.now()
 
-  await runWithStreaming(config.nodeBin, [config.claudeCli, '-p', prompt, '--dangerously-skip-permissions', '--model', model], {
+  await runWithStreaming(config.claudeCli || 'claude', ['-p', prompt, '--dangerously-skip-permissions', '--model', model], {
     cwd: dir,
+    env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' },
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
 
