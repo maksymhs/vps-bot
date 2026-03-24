@@ -15,6 +15,7 @@ import { execFile, execSync, spawn } from 'child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { log } from './lib/logger.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envFile = join(dirname(__dirname), '.env')
@@ -54,6 +55,7 @@ async function showMainMenu(clear = true) {
         { name: 'Docker Containers', value: 'containers' },
         new inquirer.Separator(chalk.gray('─────────────────')),
         { name: 'Configuration', value: 'config' },
+        { name: `View Logs (${log.file})`, value: 'logs' },
         { name: 'Exit', value: 'exit' },
       ],
     },
@@ -70,10 +72,28 @@ async function showMainMenu(clear = true) {
       return showContainers()
     case 'config':
       return showConfig()
+    case 'logs':
+      return showSystemLogs()
     case 'exit':
       console.log(chalk.gray('\nGoodbye.\n'))
       process.exit(0)
   }
+}
+
+async function showSystemLogs() {
+  const { existsSync, readFileSync } = await import('fs')
+  if (!existsSync(log.file)) {
+    console.log(chalk.yellow('\nNo logs yet.\n'))
+  } else {
+    const content = readFileSync(log.file, 'utf8')
+    const lines = content.trim().split('\n')
+    const tail = lines.slice(-40).join('\n')
+    console.log(chalk.cyan(`\n─── Last ${Math.min(lines.length, 40)} lines of ${log.file} ───\n`))
+    console.log(tail)
+    console.log()
+  }
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  return mainMenu()
 }
 
 async function showProjects() {
@@ -159,6 +179,7 @@ async function showProjectMenu(name) {
       return showProjectMenu(name)
     }
   } catch (err) {
+    log.error(`[cli] project action failed for ${name}`, err.message)
     console.error(chalk.red(`\nError: ${err.message}\n`))
     return showProjects()
   }

@@ -6,6 +6,7 @@ import { buildingSet } from '../lib/build-state.js'
 import { config } from '../lib/config.js'
 import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
+import { log } from '../lib/logger.js'
 
 const MAX_RETRIES = 2
 
@@ -546,23 +547,24 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
   if (model.includes('opus')) modelTag = '🧠 Opus'
   else if (model.includes('haiku')) modelTag = '⚡ Haiku'
 
+  log.info(`[${name}] build start`, `model=${model} dir=${dir}`)
+
   if (isOpenRouterModel(model)) {
-    // Use OpenRouter - it writes files directly, we just need Dockerfile and docker-compose
     await onStatus(`${modelTag} Usando OpenRouter...`)
     await runOpenRouter(dir, name, description, errorContext, model.replace('openrouter/', ''))
   } else {
-    // Ejecutar Claude con thinking
     await onStatus(`${modelTag} Analizando requisitos...\n_Pensando..._`)
     try {
       await runClaude(dir, name, description, onStatus, errorContext, model)
+      log.info(`[${name}] code generated`)
       await onStatus(`✅ Código generado exitosamente`)
     } catch (err) {
+      log.error(`[${name}] code generation failed`, err.message)
       throw new Error(`Error generando código: ${err.message}`)
     }
   }
 
   if (!existsSync(join(dir, 'Dockerfile'))) {
-    // OpenRouter might not generate Dockerfile, create a default one
     if (isOpenRouterModel(model)) {
       const dockerfile = `FROM node:20-alpine
 WORKDIR /app
@@ -573,6 +575,7 @@ EXPOSE 3000
 CMD ["npm", "start"]`
       writeFileSync(join(dir, 'Dockerfile'), dockerfile)
     } else {
+      log.error(`[${name}] no Dockerfile generated`)
       throw new Error('Claude no generó el Dockerfile.')
     }
   }
@@ -584,7 +587,13 @@ CMD ["npm", "start"]`
     await onStatus(`🐳 ${step}`)
   }
 
-  await dockerComposeUp(dir, onDockerProgress)
+  try {
+    await dockerComposeUp(dir, onDockerProgress)
+    log.info(`[${name}] docker compose up OK`)
+  } catch (err) {
+    log.error(`[${name}] docker compose up failed`, err.message)
+    throw err
+  }
 
   await onStatus('🔍 Verificando que arranca...')
 
@@ -598,6 +607,7 @@ CMD ["npm", "start"]`
     const ip = await getContainerIp(name)
     if (!ip) {
       const logs = await getContainerLogs(name)
+      log.error(`[${name}] container has no IP`, logs)
       throw new Error(`Container no arrancó.\n${logs.slice(-800)}`)
     }
     healthHost = ip
@@ -613,10 +623,12 @@ CMD ["npm", "start"]`
   const healthy = await pollHealth(healthHost, healthPort, 40_000, onHealthProgress)
   if (!healthy) {
     const logs = await getContainerLogs(name)
+    log.error(`[${name}] health check failed`, logs)
     throw new Error(`App no responde en 40s.\n${logs.slice(-800)}`)
   }
 
   const url = projectUrl(name)
+  log.info(`[${name}] deploy OK → ${url}`)
   await onStatus(`✅ App en ejecución\n🔗 ${url}`)
 }
 
@@ -649,6 +661,7 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
       return true
     } catch (err) {
       lastError = err
+      log.error(`[${name}] attempt ${attempt} failed`, err.message)
       if (attempt < MAX_RETRIES) {
         await ctx.reply(`⚠️ Intento ${attempt} fallido, reintentando...\n\`${err.message.slice(0, 200)}\``, { parse_mode: 'Markdown' })
         lastMsgId = null // Reset para nuevo ciclo
@@ -657,6 +670,7 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
     }
   }
 
+  log.error(`[${name}] failed after ${MAX_RETRIES} attempts`, lastError?.message)
   await ctx.reply(`❌ Falló tras ${MAX_RETRIES} intentos:\n\`${lastError?.message?.slice(0, 400)}\``, { parse_mode: 'Markdown' })
   return false
 }
