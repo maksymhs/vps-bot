@@ -169,7 +169,9 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   }
 
   try {
-    await run(config.claudeCli || 'claude', ['-p', prompt, '--dangerously-skip-permissions', '--model', model], { cwd: dir, env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' } })
+    const claudeBin = config.claudeCli || 'claude'
+    const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
+    await run('su', ['-', 'vpsbot', '-c', claudeCmd], { timeout: 300_000 })
     // Registrar uso de Claude
     try {
       recordClaudeCall(Math.round(prompt.length / 4)) // Estima tokens (aprox 1 token por 4 chars)
@@ -231,9 +233,9 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
   const lines = []
   let lastUpdate = Date.now()
 
-  await runWithStreaming(config.claudeCli || 'claude', ['-p', prompt, '--dangerously-skip-permissions', '--model', model], {
-    cwd: dir,
-    env: { ...process.env, CLAUDE_CODE_SKIP_ROOT_CHECK: '1' },
+  const claudeBin = config.claudeCli || 'claude'
+  const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
+  await runWithStreaming('su', ['-', 'vpsbot', '-c', claudeCmd], {
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
 
@@ -616,6 +618,7 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
 
 export async function deployNew(ctx, name, description, model = 'claude-sonnet-4-6') {
   mkdirSync(projectDir(name), { recursive: true })
+  try { execSync(`chown -R vpsbot:vpsbot ${JSON.stringify(projectDir(name))}`) } catch {}
   const ok = await deployWithRetry(ctx, projectDir(name), name, description, 'new', model)
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: projectDir(name), model })
@@ -658,6 +661,7 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
         rmSync(dir, { recursive: true, force: true })
       }
       mkdirSync(dir, { recursive: true })
+      try { execSync(`chown -R vpsbot:vpsbot ${JSON.stringify(dir)}`) } catch {}
     } catch (err) {
       console.error('Error limpiando directorio:', err.message)
     }

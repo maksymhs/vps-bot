@@ -33,20 +33,8 @@ else
     exit 1
 fi
 
-# Create vpsbot user (non-root for Claude Code compatibility)
-VPSBOT_USER="vpsbot"
-VPSBOT_HOME="/home/${VPSBOT_USER}"
-
-if id "$VPSBOT_USER" &>/dev/null; then
-    echo -e "${GREEN}✓ User '${VPSBOT_USER}' exists${NC}"
-else
-    echo -e "${YELLOW}Creating user '${VPSBOT_USER}'...${NC}"
-    useradd -m -s /bin/bash "$VPSBOT_USER"
-    echo -e "${GREEN}✓ User '${VPSBOT_USER}' created${NC}"
-fi
-
-# Add vpsbot to docker group
-usermod -aG docker "$VPSBOT_USER" 2>/dev/null || true
+# Install dir = where this script lives
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${CYAN}━━━ System Detection ━━━${NC}\n"
 
@@ -54,14 +42,14 @@ echo -e "${CYAN}━━━ System Detection ━━━${NC}\n"
 if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}Node.js not found. Installing...${NC}"
     if [ "$OS" = "linux" ]; then
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt-get install -y nodejs
     elif [ "$OS" = "macos" ]; then
         brew install node@20
     fi
     echo -e "${GREEN}✓ Node.js installed${NC}"
 else
-    echo -e "${GREEN}✓ Node.js$(node --version)${NC}"
+    echo -e "${GREEN}✓ Node.js $(node --version)${NC}"
 fi
 
 # Check and install Docker
@@ -69,9 +57,7 @@ if ! command -v docker &> /dev/null; then
     echo -e "${YELLOW}Docker not found. Installing...${NC}"
     if [ "$OS" = "linux" ]; then
         curl -fsSL https://get.docker.com -o get-docker.sh
-        sudo sh get-docker.sh
-        sudo usermod -aG docker $USER
-        newgrp docker
+        sh get-docker.sh
         rm get-docker.sh
     elif [ "$OS" = "macos" ]; then
         echo -e "${YELLOW}Please install Docker Desktop from: https://www.docker.com/products/docker-desktop${NC}"
@@ -86,11 +72,11 @@ fi
 if ! command -v caddy &> /dev/null; then
     echo -e "${YELLOW}Caddy not found. Installing...${NC}"
     if [ "$OS" = "linux" ]; then
-        sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-        sudo apt-get update
-        sudo apt-get install -y caddy
+        apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+        apt-get update
+        apt-get install -y caddy
     elif [ "$OS" = "macos" ]; then
         brew install caddy
     fi
@@ -99,7 +85,7 @@ else
     echo -e "${GREEN}✓ Caddy $(caddy version 2>/dev/null | head -1 || echo 'installed')${NC}"
 fi
 
-# Check and install Claude Code CLI
+# Check and install Claude Code CLI (global, as root)
 if command -v claude &> /dev/null; then
     echo -e "${GREEN}✓ Claude Code CLI $(claude --version 2>/dev/null || echo 'installed')${NC}"
     CLAUDE_CLI=$(command -v claude)
@@ -136,41 +122,40 @@ fi
 
 echo ""
 
+# Create vpsbot user (non-root, only for Claude Code execution)
+VPSBOT_USER="vpsbot"
+VPSBOT_HOME="/home/${VPSBOT_USER}"
+
+if id "$VPSBOT_USER" &>/dev/null; then
+    echo -e "${GREEN}✓ User '${VPSBOT_USER}' exists (for Claude Code)${NC}"
+else
+    echo -e "${YELLOW}Creating user '${VPSBOT_USER}' (required by Claude Code)...${NC}"
+    useradd -m -s /bin/bash "$VPSBOT_USER"
+    echo -e "${GREEN}✓ User '${VPSBOT_USER}' created${NC}"
+fi
+
+# Allow root to su to vpsbot without password
+# Give vpsbot read access to project dir
+chmod -R o+rX "$INSTALL_DIR" 2>/dev/null || true
+
+echo ""
+
 # Check npm
 if ! command -v npm &> /dev/null; then
     echo -e "${RED}NPM not found. Please install Node.js.${NC}"
     exit 1
 fi
 
-# Copy project to vpsbot home
-INSTALL_DIR="${VPSBOT_HOME}/vps-bot"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Copying project to ${INSTALL_DIR}...${NC}"
-    mkdir -p "$INSTALL_DIR"
-    cp -a "${SCRIPT_DIR}/"* "$INSTALL_DIR/" 2>/dev/null || true
-    cp -a "${SCRIPT_DIR}/".* "$INSTALL_DIR/" 2>/dev/null || true
-    chown -R "$VPSBOT_USER:$VPSBOT_USER" "$INSTALL_DIR"
-    echo -e "${GREEN}✓ Project copied to ${INSTALL_DIR}${NC}"
-else
-    chown -R "$VPSBOT_USER:$VPSBOT_USER" "$INSTALL_DIR"
-fi
-
-# Install dependencies as vpsbot
+# Install dependencies (as root, in place)
 echo -e "${CYAN}━━━ Installing Dependencies ━━━${NC}\n"
-su - "$VPSBOT_USER" -c "cd $INSTALL_DIR && npm install"
-
-# Install claude globally for vpsbot user
-if [ -n "$CLAUDE_CLI" ]; then
-    su - "$VPSBOT_USER" -c "npm install -g @anthropic-ai/claude-code 2>/dev/null || true"
-fi
+cd "$INSTALL_DIR"
+npm install
 
 echo ""
 echo -e "${CYAN}━━━ Initial Setup ━━━${NC}\n"
 
-# Run setup wizard as vpsbot
-if ! su - "$VPSBOT_USER" -c "cd $INSTALL_DIR && node src/setup.js --claude-cli '${CLAUDE_CLI}' --os '${OS}'"; then
+# Run setup wizard (as root)
+if ! node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS"; then
     echo -e "${RED}Setup wizard failed. You can run it later with: npm run setup${NC}"
 fi
 
@@ -182,14 +167,14 @@ if [ -f "${INSTALL_DIR}/.env" ]; then
     source "${INSTALL_DIR}/.env" 2>/dev/null || true
 fi
 
-# Ensure Docker is running (must be first — other steps depend on it)
+# Ensure Docker is running
 if docker info &> /dev/null; then
     echo -e "${GREEN}✓ Docker daemon is running${NC}"
 else
     echo -e "${YELLOW}Starting Docker...${NC}"
     if [ "$OS" = "linux" ]; then
-        sudo systemctl start docker 2>/dev/null || true
-        sudo systemctl enable docker 2>/dev/null || true
+        systemctl start docker 2>/dev/null || true
+        systemctl enable docker 2>/dev/null || true
     fi
     if docker info &> /dev/null; then
         echo -e "${GREEN}✓ Docker started${NC}"
@@ -214,14 +199,12 @@ if [ -n "$DOMAIN" ]; then
     echo -e "${CYAN}Setting up Caddy for domain: ${DOMAIN}${NC}"
 
     # Stop system Caddy if running (we use Docker Caddy instead)
-    sudo systemctl stop caddy 2>/dev/null || true
-    sudo systemctl disable caddy 2>/dev/null || true
+    systemctl stop caddy 2>/dev/null || true
+    systemctl disable caddy 2>/dev/null || true
 
     # Remove old caddy-proxy container if exists
     docker rm -f caddy-proxy 2>/dev/null || true
 
-    # Start caddy-docker-proxy — reads docker-compose labels automatically
-    # Also serves code.{domain} -> code-server
     docker run -d \
         --name caddy-proxy \
         --restart unless-stopped \
@@ -251,10 +234,10 @@ fi
 
 # Setup systemd services (persist after SSH close)
 NODE_BIN=$(which node)
-PROJECTS="${VPSBOT_HOME}/vps-code-bot-projects"
-su - "$VPSBOT_USER" -c "mkdir -p $PROJECTS"
+PROJECTS_DIR="${PROJECTS_DIR:-$HOME/vps-code-bot-projects}"
+mkdir -p "$PROJECTS_DIR"
 
-# Code-Server service
+# Code-Server service (runs as root)
 if command -v code-server &> /dev/null; then
     CS_BIND="0.0.0.0:${CS_PORT}"
     if [ -n "$DOMAIN" ]; then
@@ -262,14 +245,13 @@ if command -v code-server &> /dev/null; then
     fi
     CS_PASS="${CODE_SERVER_PASSWORD:-changeme}"
 
-    su - "$VPSBOT_USER" -c "mkdir -p ${VPSBOT_HOME}/.config/code-server"
-    cat > "${VPSBOT_HOME}/.config/code-server/config.yaml" << EOF
+    mkdir -p "$HOME/.config/code-server"
+    cat > "$HOME/.config/code-server/config.yaml" << EOF
 bind-addr: ${CS_BIND}
 auth: password
 password: ${CS_PASS}
 cert: false
 EOF
-    chown "$VPSBOT_USER:$VPSBOT_USER" "${VPSBOT_HOME}/.config/code-server/config.yaml"
 
     cat > /etc/systemd/system/code-server.service << EOF
 [Unit]
@@ -278,11 +260,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=${VPSBOT_USER}
-ExecStart=$(which code-server) --disable-telemetry ${PROJECTS}
+ExecStart=$(which code-server) --disable-telemetry ${PROJECTS_DIR}
 Restart=always
 RestartSec=5
-Environment=HOME=${VPSBOT_HOME}
+Environment=HOME=$HOME
 
 [Install]
 WantedBy=multi-user.target
@@ -295,7 +276,7 @@ EOF
 
     if systemctl is-active --quiet code-server; then
         if [ -n "$DOMAIN" ]; then
-            echo -e "${GREEN}✓ Code-Server → https://code.${DOMAIN} (systemd, user=${VPSBOT_USER})${NC}"
+            echo -e "${GREEN}✓ Code-Server → https://code.${DOMAIN} (systemd)${NC}"
         else
             echo -e "${GREEN}✓ Code-Server → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT} (systemd)${NC}"
         fi
@@ -306,7 +287,7 @@ else
     echo -e "${YELLOW}⚠ Code-Server not installed (optional)${NC}"
 fi
 
-# Telegram Bot service
+# Telegram Bot service (runs as root for Docker access)
 cat > /etc/systemd/system/vps-bot-telegram.service << EOF
 [Unit]
 Description=VPS-CODE-BOT Telegram Bot
@@ -314,34 +295,38 @@ After=network.target docker.service
 
 [Service]
 Type=simple
-User=${VPSBOT_USER}
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${NODE_BIN} src/bot.js
 Restart=always
 RestartSec=10
 EnvironmentFile=${INSTALL_DIR}/.env
-Environment=HOME=${VPSBOT_HOME}
+Environment=HOME=$HOME
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-echo -e "${GREEN}✓ Systemd services installed (user=${VPSBOT_USER}, persist after SSH close)${NC}"
+echo -e "${GREEN}✓ Systemd services installed (persist after SSH close)${NC}"
 echo -e "${GRAY}  code-server.service         → auto-start${NC}"
 echo -e "${GRAY}  vps-bot-telegram.service    → start from CLI menu${NC}"
+
+# Give vpsbot user access to projects dir (for Claude Code to write)
+chown -R "${VPSBOT_USER}:${VPSBOT_USER}" "$PROJECTS_DIR" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}          Installation complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${CYAN}su - vpsbot -c 'cd ~/vps-bot && npm start'${NC}   Launch menu"
-echo -e "  ${CYAN}su - vpsbot${NC}                                 Switch to vpsbot user"
+echo -e "  ${CYAN}npm start${NC}      Launch main menu"
+echo -e "  ${CYAN}npm run cli${NC}    CLI dashboard"
+echo -e "  ${CYAN}npm run setup${NC}  Reconfigure"
 echo ""
 echo -e "  ${GREEN}Services persist after closing SSH!${NC}"
-echo -e "  ${GRAY}All runs as '${VPSBOT_USER}' user (Claude Code compatible)${NC}"
+echo -e "  ${GRAY}Claude Code runs as '${VPSBOT_USER}' user (non-root)${NC}"
 echo ""
 
-# Launch directly as vpsbot
-su - "$VPSBOT_USER" -c "cd $INSTALL_DIR && node src/cli-home.js"
+# Launch directly
+cd "$INSTALL_DIR"
+node src/cli-home.js
