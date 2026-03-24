@@ -1,20 +1,19 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
-
-const FILE = process.env.PROJECTS_STATE ?? '/home/maksym/projects/projects.json'
+import { config } from './config.js'
 
 function read() {
-  if (!existsSync(FILE)) return {}
+  if (!existsSync(config.stateFile)) return {}
   try {
-    return JSON.parse(readFileSync(FILE, 'utf8'))
+    return JSON.parse(readFileSync(config.stateFile, 'utf8'))
   } catch {
     return {}
   }
 }
 
 function write(data) {
-  mkdirSync(dirname(FILE), { recursive: true })
-  writeFileSync(FILE, JSON.stringify(data, null, 2))
+  mkdirSync(dirname(config.stateFile), { recursive: true })
+  writeFileSync(config.stateFile, JSON.stringify(data, null, 2))
 }
 
 export const store = {

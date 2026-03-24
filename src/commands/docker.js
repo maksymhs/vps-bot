@@ -1,10 +1,8 @@
-import Docker from 'dockerode'
 import { spawn } from 'child_process'
-
-const docker = new Docker()
+import { getDocker } from '../lib/docker-client.js'
 
 async function findContainer(name) {
-  const containers = await docker.listContainers({
+  const containers = await getDocker().listContainers({
     all: true,
     filters: JSON.stringify({ name: [name] }),
   })
@@ -25,7 +23,7 @@ function demuxLogs(buffer) {
 }
 
 export async function psCommand(ctx) {
-  const containers = await docker.listContainers({ all: true })
+  const containers = await getDocker().listContainers({ all: true })
   if (!containers.length) return ctx.reply('No hay containers.')
 
   const lines = containers.map(c => {
@@ -136,7 +134,7 @@ export async function restartCommand(ctx) {
   const info = await findContainer(name)
   if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
 
-  await docker.getContainer(info.Id).restart()
+  await getDocker().getContainer(info.Id).restart()
   return ctx.reply(`♻️ \`${name}\` reiniciado.`, { parse_mode: 'Markdown' })
 }
 

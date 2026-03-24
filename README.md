@@ -1,210 +1,254 @@
-# VPS Bot 🚀
+# VPS-CODE-BOT
 
-Telegram bot para gestionar proyectos Node.js en VPS con **Claude Code** como generador de código.
+Intelligent VPS management platform with automatic application generation powered by Claude Code.
 
-## ✨ Características
+## One-Command Installation
 
-- 🤖 **Generación de código con Claude** — Crea proyectos completos describiendo qué quieres
-- 🔄 **Reconstrucción inteligente** — Modifica proyectos existentes con cambios incrementales
-- 🐳 **Docker automático** — Build, deploy y health checks automáticos
-- 📊 **Menú interactivo** — Navega fácilmente por tus proyectos
-- ⚡ **Tracking de uso** — Monitorea consumo de Claude API
-- 🎛️ **Múltiples modelos** — Elige entre Sonnet, Opus o Haiku
-- 📋 **Logs en vivo** — Ver consola de Docker en tiempo real
-- 🎯 **Control total** — Start/Stop, rebuild, delete projects
-
-## 📋 Requisitos
-
-- Node.js 18+
-- Docker & Docker Compose
-- Telegraf (bot framework)
-- Claude Code CLI instalado
-- Token de Telegram Bot
-
-## 🚀 Instalación
+**From anywhere, execute:**
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/maksymhs/vps-bot.git
-cd vps-bot
-
-# Instalar dependencias
-npm install
-
-# Configurar variables de entorno
-cp .env.example .env
-# Edita .env con tus datos:
-# - BOT_TOKEN: token de tu bot de Telegram
-# - CHAT_ID: tu ID de chat en Telegram
-# - DOMAIN: tu dominio (ej: maksym.site)
-# - PROJECTS_DIR: ruta donde crear proyectos
+bash <(curl -sL https://raw.githubusercontent.com/your-username/vps-code-bot/main/bootstrap.sh)
 ```
 
-## 📖 Uso
-
-### Menú Principal
-```
-/menu  → Abre el menú interactivo
-```
-
-### Crear Proyecto
-```
-/new nombreapp "Descripción de lo que quiero"
+Or manually:
+```bash
+git clone https://github.com/your-username/vps-code-bot.git
+cd vps-code-bot
+bash bootstrap.sh
 ```
 
-Ejemplo:
+**The installer will automatically:**
+- Clone repository (if needed)
+- Detect your OS (Linux/macOS)
+- Install Node.js, Docker, Caddy (if missing)
+- Validate Claude Code CLI installation
+- Launch interactive setup wizard
+- Configure network (domain or IP+port)
+- Setup projects directory
+- Optionally configure Telegram bot
+- Start the system
+
+## Overview
+
+VPS-CODE-BOT is a professional-grade infrastructure automation platform that combines:
+- **Claude Code** for intelligent code generation (required)
+- **Docker** for application containerization
+- **Caddy** for reverse proxy and SSL
+- **Telegram** for remote control (optional)
+- **Interactive CLI** for local management
+
+Generate applications by describing requirements, deploy them automatically to Docker, and manage everything via web dashboard (Telegram optional).
+
+## Features
+
+- **Intelligent Code Generation** — Describe what you need, Claude Code generates complete applications
+- **Automated Deployment** — Build and deploy as isolated Docker containers
+- **Flexible Networking** — Use custom domain OR IP+port, you decide
+- **Reverse Proxy** — Caddy automatically exposes applications with SSL (domain mode)
+- **Remote Control** — Manage infrastructure via Telegram (optional)
+- **Web Dashboard** — Interactive CLI for local management
+- **Smart Rebuilds** — Apply patches or rebuild from scratch
+- **System Monitoring** — Real-time logs, status, container management
+
+## Installation
+
+**Prerequisites:** Git, bash
+
+**Install in one command:**
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/your-username/vps-code-bot/main/install.sh)
 ```
-/new calculator "Una calculadora web que suma, resta, multiplica y divide"
+
+Or manually:
+```bash
+git clone https://github.com/your-username/vps-code-bot.git
+cd vps-code-bot
+bash install.sh
 ```
 
-**Flujo:**
-1. Elige modelo (Sonnet, Opus, Haiku)
-2. Claude genera código automáticamente
-3. Docker construye la imagen
-4. App se despliega en `https://nombreapp.tudominio.com`
+## After Installation
 
-### Reconstruir Proyecto
-```
-/rebuild nombreapp
+```bash
+npm start      # Launch main menu
+npm run bot    # Start Telegram bot (if configured)
+npm run cli    # Web dashboard
 ```
 
-**Opciones:**
-- **Patch** — Cambios incrementales (más rápido)
-- **Full** — Regenerar todo desde cero
+## Commands
 
-Ejemplo:
+```bash
+npm start      # Main menu
+npm run setup  # Reconfigure
+npm run bot    # Telegram bot
+npm run cli    # Web dashboard
+npm run dev    # Development mode (watch)
 ```
-Cambios: "Quiero agregar un botón para limpiar"
+
+## Requirements
+
+**Automatically installed by `install.sh`:**
+- Node.js 18+
+- Docker
+- Caddy
+
+**Manual requirement:**
+- **Claude Code CLI** (download from https://claude.com/download)
+
+## Configuration
+
+### Initial Setup
+The `install.sh` script will guide you through:
+1. **Choosing network mode:**
+   - Domain (example.com) — Uses Caddy with automatic SSL
+   - IP+Port (192.168.1.1:8080) — Direct IP access
+2. **Claude Code path** — Auto-detected or provide manually
+3. **Telegram (optional)** — Leave blank to skip
+4. **Projects directory** — Where applications are stored
+
+### Manual Configuration
+Edit `.env` file:
+
+```bash
+# Network - Choose ONE:
+DOMAIN=example.com              # For domain mode
+# OR
+IP_ADDRESS=192.168.1.100        # For IP mode
+PORT=8080
+
+# Required
+CLAUDE_CLI=/path/to/claude-code/cli.js
+PROJECTS_DIR=/home/user/vps-code-bot-projects
+
+# Optional
+BOT_TOKEN=your_telegram_token
+CHAT_ID=your_chat_id
 ```
 
-### Gestionar Proyectos
-- `/list` — Ver todos tus proyectos
-- `/logs nombreapp` — Ver logs de Docker
-- `/url nombreapp` — Copiar URL del proyecto
-- `/delete nombreapp` — Eliminar proyecto
+### Reconfigure Later
+```bash
+npm run setup
+```
 
-### Monitorear Uso
-- `/menu` → `⚡ Claude Usage`
-  - Ver límites de Claude API
-  - Cuándo se resetean
-
-## 🏗️ Estructura del Proyecto
+## Architecture
 
 ```
-vps-bot/
+User Input
+    |
+    +--- Telegram Bot ──┐
+    |                   |
+    +--- Web Dashboard  |
+                        |
+                    VPS-CODE-BOT
+                        |
+        ┌───────────────┼───────────────┐
+        |               |               |
+    Claude Code    Docker Client    Config
+        |               |
+        v               v
+    Generate        Containers
+    Code
+        |
+        v
+    Docker Registry
+        |
+        v
+    Running Apps
+```
+
+## Workflow
+
+1. **Describe** — Tell the system what application you need
+2. **Generate** — Claude Code generates complete source code
+3. **Build** — Docker builds container image
+4. **Deploy** — Container starts and health checks pass
+5. **Expose** — Caddy reverse proxy makes it accessible
+
+## Project Structure
+
+```
+vps-code-bot/
 ├── src/
-│   ├── bot.js                 # Bot principal
+│   ├── bot.js              # Telegram bot entry point
+│   ├── cli.js              # Web dashboard
+│   ├── cli-home.js         # Main menu screen
+│   ├── setup.js            # Configuration wizard
 │   ├── commands/
-│   │   ├── projects.js        # Crear/reconstruir proyectos
-│   │   ├── menu.js            # Menú interactivo
-│   │   ├── docker.js          # Comandos Docker
-│   │   └── status.js          # Estado del servidor
+│   │   ├── projects.js     # Project management
+│   │   ├── docker.js       # Docker operations
+│   │   ├── git.js          # Git operations
+│   │   └── menu.js         # UI components
 │   └── lib/
-│       ├── store.js           # Base de datos (JSON)
-│       ├── usage.js           # Tracking de uso de Claude
-│       └── console.js         # Streaming de logs
-├── package.json
-├── .env                       # Configuración (no subir!)
+│       ├── config.js       # Configuration management
+│       ├── docker-client.js# Docker singleton
+│       ├── store.js        # Data persistence
+│       ├── branding.js     # Project branding
+│       └── caddy.js        # Caddy Admin API
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
 └── README.md
 ```
 
-## 🔧 Cómo Funciona Internamente
+## Technology Stack
 
-### `/new nombreapp "descripción"`
-1. Crea carpeta `/proyectos/nombreapp/`
-2. Genera prompt para Claude con la descripción
-3. Claude Code crea:
-   - `src/index.js` — Servidor Express
-   - `package.json` — Dependencias
-   - `Dockerfile` — Imagen Docker
-   - `docker-compose.yml` — Orquestación
-4. Docker construye y deploya
-5. Bot verifica que la app responde HTTP
+- **Runtime** — Node.js 18+
+- **Bot Framework** — Telegraf
+- **Code Generation** — Claude Code CLI
+- **Containerization** — Docker & Docker Compose
+- **Reverse Proxy** — Caddy
+- **CLI UI** — Inquirer.js
+- **Data Storage** — JSON files
 
-### `/rebuild nombreapp`
-1. Lee código existente
-2. Claude recibe: descripción original + cambios nuevos
-3. **Modifica** archivos existentes (no crea desde cero)
-4. Docker rebuild (más rápido que nuevo build)
-5. Verifica nuevamente
+## Docker Testing
 
-### Botones Interactivos
-Después de cada operación:
-- `♻️ Rebuild` — Hacer cambios
-- `📋 Logs` — Ver consola
-- `🛑 Stop / ▶️ Start` — Control
-- `🔗 Copiar URL` — Link del proyecto
-- `🗑️ Eliminar` — Borrar todo
-
-## 📊 Tracking de Uso
-
-El bot monitorea:
-- **Por minuto** — 100 llamadas máximo (Claude API)
-- **Por día** — 1,000 llamadas máximo
-- **Reseteo** — Cada 24 horas
-
-Ver en `/menu` → `⚡ Claude Usage`
-
-## 🔒 Seguridad
-
-- Solo responde a tu CHAT_ID
-- Token de bot en `.env` (no en git)
-- `.claude-usage.json` ignorado en git
-- Proyectos aislados en Docker
-
-## 📝 Variables de Entorno
-
-```env
-BOT_TOKEN=tu_token_de_telegram
-CHAT_ID=tu_id_de_chat
-DOMAIN=tu.dominio.com
-PROJECTS_DIR=/home/usuario/proyectos
-NODE_BIN=/ruta/a/node
-CLAUDE_CLI=/ruta/a/claude-code/cli.js
-```
-
-## 🛠️ Desarrollo
+To test in isolated Docker environment:
 
 ```bash
-# Iniciar bot
-npm start
-
-# Ver logs
-tail -f /tmp/bot.log
+chmod +x test-setup.sh
+./test-setup.sh
 ```
 
-## 📚 Stack Tecnológico
+See [TESTING.md](TESTING.md) for details.
 
-- **Bot Framework** — Telegraf
-- **Generación de código** — Claude Code CLI
-- **Servidor** — Express.js
-- **Contenedores** — Docker & Docker Compose
-- **Base de datos** — JSON (store.js)
-- **Node.js** — v18+
+## Security
 
-## 🐛 Troubleshooting
+- Bot token stored in `.env` (never committed)
+- Single-user access via Telegram CHAT_ID
+- Docker socket access restricted to local
+- Applications isolated in containers
+- HTTPS via Caddy with automatic certificates
 
-### "Claude Code no encontrado"
-Verifica `CLAUDE_CLI` en `.env` apunta a la ruta correcta
+## Troubleshooting
 
-### "Container no arranca"
-- Ver logs: `/logs nombreapp`
-- Revisar `Dockerfile` generado
-- Puede ser falta de puerto o error en código
+### System not configured
+```bash
+npm run setup
+```
 
-### "Rate limit de Claude"
-- Espera 1 minuto (limite por minuto)
-- O espera 24 horas (limite por día)
-- Ver `/menu` → `⚡ Claude Usage`
+### Bot won't start
+Check that `.env` file exists with valid configuration:
+```bash
+cat .env
+```
 
-## 📄 Licencia
+### Docker containers not building
+Check Claude Code CLI is properly installed:
+```bash
+which claude-code
+echo $CLAUDE_CLI   # Should match .env value
+```
+
+## Documentation
+
+- [TESTING.md](TESTING.md) — Docker testing setup
+- `.env.example` — Configuration template
+- `src/setup.js` — Configuration wizard
+- `src/cli-home.js` — Main menu
+
+## License
 
 MIT
 
-## 👤 Autor
-
-Maksym — [@maksymhs](https://github.com/maksymhs)
-
 ---
 
-**¿Preguntas?** Abre un [issue](https://github.com/maksymhs/vps-bot/issues) en GitHub 🎯
+**VPS-CODE-BOT** — Intelligent VPS Management Platform

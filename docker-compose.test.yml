@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Caddy reverse proxy con Admin API habilitado
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "2019:2019"  # Admin API
+    volumes:
+      - ./test-caddy.conf:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - vps-network
+    environment:
+      ACME_AGREE: "true"
+
+  # VPS Bot
+  vps-bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - caddy
+    environment:
+      BOT_TOKEN=${BOT_TOKEN:-test_token_123456789:ABCdefGHIjklmnOPQRstUVwxyz}
+      CHAT_ID=${CHAT_ID:-123456789}
+      DOMAIN=localhost
+      PROJECTS_DIR=/projects
+      CADDY_ADMIN_URL=http://caddy:2019
+      NODE_BIN=/usr/bin/node
+      CLAUDE_CLI=/usr/local/bin/claude-code
+      DOCKER_SOCKET=/var/run/docker.sock
+    volumes:
+      # CRITICAL: Mount Docker socket from host
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Projects directory
+      - vps_projects:/projects
+    networks:
+      - vps-network
+    container_name: vps-bot-test
+
+networks:
+  vps-network:
+    driver: bridge
+
+volumes:
+  vps_projects:
+  caddy_data:
+  caddy_config:

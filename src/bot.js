@@ -7,23 +7,26 @@ import { newCommand, rebuildCommand, listCommand, urlCommand, deleteProjectComma
 import { showMain, showList, showProject, showDeleteConfirm, startNewFlow, pendingNew, startRebuildFlow, startRebuildPatch, startRebuildFull, pendingRebuild, showModelSelect, showGitMenu } from './commands/menu.js'
 import { store } from './lib/store.js'
 import { getUsageText } from './lib/usage.js'
-import { gitPush, gitPull, gitStatus } from './commands/git.js'
-import Docker from 'dockerode'
+import { gitPush, gitPull, gitStatus, initGitRepo, gitCommit } from './commands/git.js'
+import { getDocker } from './lib/docker-client.js'
+import { buildingSet } from './lib/build-state.js'
+import { config } from './lib/config.js'
+import { getBanner } from './lib/branding.js'
+import { getCodeServerUrl, startCodeServer } from './lib/code-server.js'
 import { existsSync, rmSync } from 'fs'
+import chalk from 'chalk'
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
-const ALLOWED_CHAT_ID = parseInt(process.env.CHAT_ID)
-const PROJECTS_DIR = process.env.PROJECTS_DIR ?? '/home/maksym/projects'
-const docker = new Docker()
-
-const building = new Set()
+const ALLOWED_CHAT_ID = config.chatId
+const pendingGitInit = new Map()
+const pendingGitCommit = new Map()
 
 // Sends a project menu as a new message (not edit)
 async function sendProjectMenu(ctx, name) {
   const { Markup } = await import('telegraf')
   const project = store.get(name)
   if (!project) return
-  const containers = await docker.listContainers({ all: true, filters: JSON.stringify({ name: [`${name}-app`] }) }).catch(() => [])
+  const containers = await getDocker().listContainers({ all: true, filters: JSON.stringify({ name: [`${name}-app`] }) }).catch(() => [])
   const status = containers[0]?.State ?? 'unknown'
   const icon = status === 'running' ? '🟢' : '🔴'
   const desc = (project.description ?? '').slice(0, 120)
@@ -69,7 +72,7 @@ bot.command('delete', deleteProjectCommand)
 bot.on('text', async (ctx, next) => {
   // Rebuild flow
   const rebuildState = pendingRebuild.get(ctx.chat.id)
-  if (rebuildState) {
+  if (rebuildState && rebuildState.step === 'text') {
     const { name, mode } = rebuildState
     const project = store.get(name)
     if (!project) { pendingRebuild.delete(ctx.chat.id); return ctx.reply(`Proyecto "${name}" no encontrado.`) }
@@ -81,6 +84,56 @@ bot.on('text', async (ctx, next) => {
 
     pendingRebuild.set(ctx.chat.id, { name, mode, description, step: 'model' })
     return showModelSelect(ctx, 'rbm', name)
+  }
+
+  // Git init flow
+  const gitInitState = pendingGitInit.get(ctx.chat.id)
+  if (gitInitState) {
+    const { name } = gitInitState
+    const gitUrl = ctx.message.text.trim()
+
+    if (gitUrl.toLowerCase() === 'skip') {
+      pendingGitInit.delete(ctx.chat.id)
+      await ctx.reply(`⏭️ Inicialización sin URL remota`)
+      const finalGitUrl = null
+    } else {
+      // Validar que sea una URL válida
+      if (!gitUrl.startsWith('http')) {
+        return ctx.reply('❌ URL inválida. Debe comenzar con http:// o https://')
+      }
+      var finalGitUrl = gitUrl
+    }
+
+    pendingGitInit.delete(ctx.chat.id)
+
+    try {
+      await ctx.reply(`⚙️ Inicializando repositorio Git...`)
+      await initGitRepo(name, finalGitUrl)
+      await ctx.reply(`✅ Repositorio inicializado correctamente${finalGitUrl ? `\n🔗 Remote: \`${finalGitUrl}\`` : ''}`, { parse_mode: 'Markdown' })
+      return
+    } catch (err) {
+      await ctx.reply(`❌ Error inicializando Git: ${err.message}`, { parse_mode: 'Markdown' })
+      return
+    }
+  }
+
+  // Git commit flow
+  const gitCommitState = pendingGitCommit.get(ctx.chat.id)
+  if (gitCommitState && gitCommitState.step === 'message') {
+    const { name } = gitCommitState
+    const message = ctx.message.text.trim()
+
+    pendingGitCommit.delete(ctx.chat.id)
+
+    try {
+      await ctx.reply(`💬 Creando commit...`)
+      const result = await gitCommit(name, message)
+      await ctx.reply(result, { parse_mode: 'Markdown' })
+      return
+    } catch (err) {
+      await ctx.reply(`❌ Error en commit: ${err.message}`, { parse_mode: 'Markdown' })
+      return
+    }
   }
 
   const state = pendingNew.get(ctx.chat.id)
@@ -216,32 +269,29 @@ bot.action(/^git_init:(.+)$/, async (ctx) => {
 bot.action(/^git_pub:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
+  pendingGitInit.set(ctx.chat.id, { name, private: false })
   await ctx.editMessageText(`📝 *Escribe URL del repo público*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
     parse_mode: 'Markdown'
   })
-  const pendingGitInit = new Map()
-  pendingGitInit.set(ctx.chat.id, { name, private: false })
 })
 
 bot.action(/^git_priv:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
+  pendingGitInit.set(ctx.chat.id, { name, private: true })
   await ctx.editMessageText(`📝 *Escribe URL del repo privado*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
     parse_mode: 'Markdown'
   })
-  const pendingGitInit = new Map()
-  pendingGitInit.set(ctx.chat.id, { name, private: true })
 })
 
 // Commit personalizado
 bot.action(/^git_commit:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
+  pendingGitCommit.set(ctx.chat.id, { name, step: 'message' })
   await ctx.editMessageText(`💬 *Escribe el mensaje de commit*\n\nEjemplo: "Agregar validación al formulario"`, {
     parse_mode: 'Markdown'
   })
-  const pendingGitCommit = new Map()
-  pendingGitCommit.set(ctx.chat.id, { name })
 })
 
 bot.action('status', async (ctx) => {
@@ -266,7 +316,7 @@ bot.action('status', async (ctx) => {
 bot.action('ps', async (ctx) => {
   await answer(ctx)
   const { Markup } = await import('telegraf')
-  const containers = await docker.listContainers({ all: true })
+  const containers = await getDocker().listContainers({ all: true })
   const lines = containers.length
     ? containers.map(c => {
         const n = c.Names[0].replace('/', '')
@@ -294,7 +344,7 @@ bot.action(/^rb:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   if (!store.get(name)) return ctx.editMessageText(`Proyecto "${name}" no encontrado.`)
-  if (building.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
   await startRebuildFlow(ctx, name)
 })
 
@@ -315,12 +365,12 @@ bot.action(/^lg:(.+)$/, async (ctx) => {
   const { Markup } = await import('telegraf')
   const name = ctx.match[1]
   try {
-    const containers = await docker.listContainers({
+    const containers = await getDocker().listContainers({
       all: true,
       filters: JSON.stringify({ name: [`${name}-app`] }),
     })
     if (!containers.length) return ctx.editMessageText(`Container "${name}" no encontrado.`)
-    const stream = await docker.getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
+    const stream = await getDocker().getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
     const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).slice(-3500).trim() || '(sin logs)'
     await ctx.editMessageText(`\`\`\`\n${text}\n\`\`\``, {
       parse_mode: 'Markdown',
@@ -338,8 +388,8 @@ bot.action(/^st:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   try {
-    const containers = await docker.listContainers({ filters: JSON.stringify({ name: [`${name}-app`] }) })
-    if (containers.length) await docker.getContainer(containers[0].Id).stop()
+    const containers = await getDocker().listContainers({ filters: JSON.stringify({ name: [`${name}-app`] }) })
+    if (containers.length) await getDocker().getContainer(containers[0].Id).stop()
     await showProject(ctx, name)
   } catch (err) {
     await ctx.answerCbQuery(`Error: ${err.message}`, { show_alert: true })
@@ -352,8 +402,8 @@ bot.action(/^go:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   try {
-    const containers = await docker.listContainers({ all: true, filters: JSON.stringify({ name: [`${name}-app`] }) })
-    if (containers.length) await docker.getContainer(containers[0].Id).start()
+    const containers = await getDocker().listContainers({ all: true, filters: JSON.stringify({ name: [`${name}-app`] }) })
+    if (containers.length) await getDocker().getContainer(containers[0].Id).start()
     await showProject(ctx, name)
   } catch (err) {
     await ctx.answerCbQuery(`Error: ${err.message}`, { show_alert: true })
@@ -366,6 +416,50 @@ bot.action(/^url:(.+)$/, async (ctx) => {
   const name = ctx.match[1]
   const project = store.get(name)
   await ctx.answerCbQuery(project ? project.url : 'No encontrado', { show_alert: true }).catch(() => {})
+})
+
+// Code-Server
+bot.action(/^cs:(.+)$/, async (ctx) => {
+  const { Markup } = await import('telegraf')
+  const name = ctx.match[1]
+  const project = store.get(name)
+
+  if (!project) {
+    await ctx.answerCbQuery('Proyecto no encontrado', { show_alert: true })
+    return
+  }
+
+  try {
+    // Try to get existing code-server URL
+    let url = getCodeServerUrl(name)
+
+    // If not running, start it
+    if (!url) {
+      await ctx.editMessageText(`🚀 Iniciando Code-Server para *${name}*...`, { parse_mode: 'Markdown' })
+      const result = await startCodeServer(name, project.dir)
+      if (result.success) {
+        url = result.url
+      } else {
+        await ctx.editMessageText(`❌ Error: ${result.message}`, { parse_mode: 'Markdown' })
+        await showProject(ctx, name)
+        return
+      }
+    }
+
+    // Show the URL with a button to open
+    const msg = `💻 *Code-Server - ${name}*\n\n🔗 \`${url}\`\n\n_Haz clic en el enlace para abrir_`
+    await ctx.editMessageText(msg, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.url('🌐 Abrir Code-Server', url)],
+        [Markup.button.callback('⬅️ Volver', `p:${name}`)],
+      ]),
+    })
+  } catch (err) {
+    console.error('Code-Server error:', err)
+    await ctx.editMessageText(`❌ Error al acceder a Code-Server: ${err.message}`, { parse_mode: 'Markdown' })
+    await showProject(ctx, name)
+  }
 })
 
 // Delete confirm
@@ -385,7 +479,7 @@ bot.action(/^del_ok:(.+)$/, async (ctx) => {
   await ctx.editMessageText(`🗑️ Eliminando *${name}*...`, { parse_mode: 'Markdown' })
 
   try {
-    const dir = `${PROJECTS_DIR}/${name}`
+    const dir = `${config.projectsDir}/${name}`
     await new Promise((res) => {
       execFile('docker', ['compose', 'down', '--rmi', 'local'], { cwd: dir }, () => res())
     })
@@ -412,8 +506,8 @@ bot.action(/^nbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
   if (!state || state.step !== 'model' || state.name !== name) return ctx.editMessageText('Sesión expirada. Usa /menu.')
   pendingNew.delete(ctx.chat.id)
 
-  if (building.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
-  building.add(name)
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  buildingSet.add(name)
 
   // Start deploy in background to avoid timeout
   deployNew(ctx, name, state.description, model)
@@ -425,7 +519,7 @@ bot.action(/^nbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
       }
     })
     .catch(err => console.error('Error en deploy:', err))
-    .finally(() => building.delete(name))
+    .finally(() => buildingSet.delete(name))
 })
 
 // Model selection — rebuild
@@ -439,22 +533,25 @@ bot.action(/^rbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
   const model = modelMap[ctx.match[1]] || 'claude-sonnet-4-6'
   const name = ctx.match[2]
   const state = pendingRebuild.get(ctx.chat.id)
-  if (!state || state.step !== 'model' || state.name !== name) return ctx.editMessageText('Sesión expirada. Usa /menu.')
+  if (!state || state.step !== 'model' || state.name !== name) {
+    pendingRebuild.delete(ctx.chat.id)
+    return ctx.editMessageText('Sesión expirada. Usa /menu.')
+  }
   pendingRebuild.delete(ctx.chat.id)
 
   const project = store.get(name)
   if (!project) return ctx.editMessageText(`Proyecto "${name}" no encontrado.`)
-  if (building.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
 
-  building.add(name)
+  buildingSet.add(name)
 
   // Start deploy in background to avoid timeout
-  deployRebuild(ctx, name, state.description, model)
+  deployRebuild(ctx, name, state.description, model, state.mode)
     .then(ok => {
       if (ok) showProject(ctx, name).catch(() => {})
     })
     .catch(err => console.error('Error en rebuild:', err))
-    .finally(() => building.delete(name))
+    .finally(() => buildingSet.delete(name))
 })
 
 // ── Launch ─────────────────────────────────────────────────────────────────
@@ -467,7 +564,8 @@ bot.catch((err, ctx) => {
 })
 
 bot.launch()
-console.log('Bot arrancado')
+console.log(getBanner())
+console.log(chalk.green('Bot started successfully.\n'))
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))

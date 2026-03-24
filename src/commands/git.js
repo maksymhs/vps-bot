@@ -1,8 +1,7 @@
 import { execFile } from 'child_process'
 import { existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
-
-const PROJECTS_DIR = process.env.PROJECTS_DIR ?? '/home/maksym/projects'
+import { config } from '../lib/config.js'
 
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -15,7 +14,7 @@ function run(cmd, args, opts = {}) {
 }
 
 export async function initGitRepo(name, gitUrl) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     // Verificar si ya es un repo
@@ -27,6 +26,13 @@ export async function initGitRepo(name, gitUrl) {
       await run('git', ['init'], { cwd: dir })
       await run('git', ['config', 'user.email', 'bot@vps.local'], { cwd: dir })
       await run('git', ['config', 'user.name', 'VPS Bot'], { cwd: dir })
+
+      // Configurar rama a main
+      await run('git', ['config', 'init.defaultBranch', 'main'], { cwd: dir })
+
+      // Crear un archivo .gitkeep para garantizar que hay algo que commitear
+      writeFileSync(join(dir, '.gitkeep'), '')
+
       await run('git', ['add', '.'], { cwd: dir })
       await run('git', ['commit', '-m', 'Initial commit'], { cwd: dir })
 
@@ -42,7 +48,7 @@ export async function initGitRepo(name, gitUrl) {
 }
 
 export async function gitCommit(name, message = null, token = null) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     // Hacer commit de cambios
@@ -64,7 +70,7 @@ export async function gitCommit(name, message = null, token = null) {
 }
 
 export async function gitPush(name, token = null) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     // Verificar si es un repo git
@@ -77,6 +83,19 @@ export async function gitPush(name, token = null) {
       throw err
     }
 
+    // Verificar si hay remote configurado
+    let hasRemote = false
+    try {
+      const remotes = await run('git', ['remote'], { cwd: dir })
+      hasRemote = remotes.trim().length > 0
+    } catch {
+      hasRemote = false
+    }
+
+    if (!hasRemote) {
+      return `ℹ️ No hay remote configurado\n\nEste es un repositorio Git local. Para subir a GitHub:\n1. Crea un repo vacío en GitHub\n2. Usa: \`git remote add origin <url>\`\n3. Luego: \`git push -u origin main\``
+    }
+
     // Hacer commit de cambios (automático)
     await run('git', ['add', '.'], { cwd: dir })
 
@@ -86,8 +105,15 @@ export async function gitPush(name, token = null) {
       // No hay cambios para commitear, está bien
     }
 
-    // Push
-    let pushCmd = ['push', '-u', 'origin', 'main']
+    // Obtener la rama actual
+    let currentBranch = 'main'
+    try {
+      currentBranch = (await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir })).trim()
+    } catch {
+      // Si falla, usar 'main' como default
+    }
+
+    let pushCmd = ['push', '-u', 'origin', currentBranch]
 
     // Si hay token, usarlo para autenticación
     if (token) {
@@ -115,7 +141,7 @@ export async function gitPush(name, token = null) {
 }
 
 export async function gitPull(name, token = null) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     // Verificar si es un repo git
@@ -126,6 +152,27 @@ export async function gitPull(name, token = null) {
         throw new Error('INIT_REPO_NEEDED')
       }
       throw err
+    }
+
+    // Verificar si hay remote configurado
+    let hasRemote = false
+    try {
+      const remotes = await run('git', ['remote'], { cwd: dir })
+      hasRemote = remotes.trim().length > 0
+    } catch {
+      hasRemote = false
+    }
+
+    if (!hasRemote) {
+      return `ℹ️ No hay remote configurado\n\nEste es un repositorio Git local. Para sincronizar con GitHub:\n1. Crea un repo vacío en GitHub\n2. Usa: \`git remote add origin <url>\`\n3. Luego: \`git pull origin main\``
+    }
+
+    // Obtener la rama actual
+    let currentBranch = 'main'
+    try {
+      currentBranch = (await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir })).trim()
+    } catch {
+      // Si falla, usar 'main' como default
     }
 
     // Si hay token, usarlo
@@ -143,7 +190,7 @@ export async function gitPull(name, token = null) {
       }
     }
 
-    const output = await run('git', ['pull', 'origin', 'main'], { cwd: dir })
+    const output = await run('git', ['pull', 'origin', currentBranch], { cwd: dir })
     return `✅ Pull completado\n\`${output.slice(0, 200)}\``
   } catch (err) {
     if (err.message === 'INIT_REPO_NEEDED') {
@@ -154,7 +201,7 @@ export async function gitPull(name, token = null) {
 }
 
 export async function gitStatus(name) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     const status = await run('git', ['status', '--short'], { cwd: dir })
@@ -176,7 +223,7 @@ export async function gitStatus(name) {
 }
 
 export async function getGitRemote(name) {
-  const dir = join(PROJECTS_DIR, name)
+  const dir = join(config.projectsDir, name)
 
   try {
     const remote = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })

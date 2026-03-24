@@ -1,9 +1,7 @@
 import { Markup } from 'telegraf'
-import Docker from 'dockerode'
+import { getDocker } from '../lib/docker-client.js'
 import { store } from '../lib/store.js'
 import { getUsageText } from '../lib/usage.js'
-
-const docker = new Docker()
 
 // Conversation state for /new project flow
 // Map<chatId, { step: 'name'|'desc', msgId: number, name?: string }>
@@ -15,7 +13,7 @@ export const pendingRebuild = new Map()
 
 async function containerStatus(projectName) {
   try {
-    const list = await docker.listContainers({
+    const list = await getDocker().listContainers({
       all: true,
       filters: JSON.stringify({ name: [`${projectName}-app`] }),
     })
@@ -94,9 +92,9 @@ export async function showProject(ctx, name) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [toggleBtn, Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
+        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
         [Markup.button.callback('⚙️ Git', `git_menu:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
-        [Markup.button.callback('⬅️ Lista', 'list')],
+        [toggleBtn, Markup.button.callback('⬅️ Lista', 'list')],
       ]),
     }
   )

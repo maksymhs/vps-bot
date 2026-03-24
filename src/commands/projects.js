@@ -1,26 +1,21 @@
 import { execFile, execSync, spawn } from 'child_process'
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
-import Docker from 'dockerode'
+import { getDocker } from '../lib/docker-client.js'
+import { buildingSet } from '../lib/build-state.js'
+import { config } from '../lib/config.js'
 import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
+import { startCodeServer } from '../lib/code-server.js'
 
-const PROJECTS_DIR = process.env.PROJECTS_DIR ?? '/home/maksym/projects'
-const DOMAIN = process.env.DOMAIN ?? 'maksym.site'
-const NODE_BIN = process.env.NODE_BIN ?? '/usr/lib/code-server/lib/node'
-const CLAUDE_CLI = process.env.CLAUDE_CLI ?? '/home/maksym/.local/share/code-server/extensions/anthropic.claude-code-2.1.81-universal/resources/claude-code/cli.js'
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? null
 const MAX_RETRIES = 2
 
-const docker = new Docker()
-const building = new Set()
-
 function projectDir(name) {
-  return join(PROJECTS_DIR, name)
+  return join(config.projectsDir, name)
 }
 
 function projectUrl(name) {
-  return `https://${name}.${DOMAIN}`
+  return config.projectUrl(name)
 }
 
 function run(cmd, args, opts = {}) {
@@ -99,7 +94,7 @@ function writeComposeFile(dir, name) {
     networks:
       - caddy
     labels:
-      caddy: ${name}.${DOMAIN}
+      caddy: ${name}.${config.domain}
       caddy.reverse_proxy: "{{upstreams 3000}}"
 
 networks:
@@ -175,7 +170,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   }
 
   try {
-    await run(NODE_BIN, [CLAUDE_CLI, '-p', prompt, '--dangerously-skip-permissions', '--model', model], { cwd: dir })
+    await run(config.nodeBin, [config.claudeCli, '-p', prompt, '--dangerously-skip-permissions', '--model', model], { cwd: dir })
     // Registrar uso de Claude
     try {
       recordClaudeCall(Math.round(prompt.length / 4)) // Estima tokens (aprox 1 token por 4 chars)
@@ -237,7 +232,7 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
   const lines = []
   let lastUpdate = Date.now()
 
-  await runWithStreaming(NODE_BIN, [CLAUDE_CLI, '-p', prompt, '--dangerously-skip-permissions', '--model', model], {
+  await runWithStreaming(config.nodeBin, [config.claudeCli, '-p', prompt, '--dangerously-skip-permissions', '--model', model], {
     cwd: dir,
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
@@ -260,7 +255,7 @@ async function runOpenRouter(dir, name, description, errorContext = null, model 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Authorization': `Bearer ${config.openrouterKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://vps-bot.local',
       'X-Title': 'VPS-Bot',
@@ -447,22 +442,22 @@ async function dockerComposeDown(dir) {
 }
 
 async function getContainerIp(name) {
-  const containers = await docker.listContainers({
+  const containers = await getDocker().listContainers({
     filters: JSON.stringify({ name: [`${name}-app`] }),
   })
   if (!containers.length) return null
-  const info = await docker.getContainer(containers[0].Id).inspect()
+  const info = await getDocker().getContainer(containers[0].Id).inspect()
   return info.NetworkSettings.Networks?.caddy?.IPAddress ?? null
 }
 
 async function getContainerLogs(name) {
   try {
-    const containers = await docker.listContainers({
+    const containers = await getDocker().listContainers({
       all: true,
       filters: JSON.stringify({ name: [`${name}-app`] }),
     })
     if (!containers.length) return ''
-    const container = docker.getContainer(containers[0].Id)
+    const container = getDocker().getContainer(containers[0].Id)
     const stream = await container.logs({ stdout: true, stderr: true, tail: 30 })
     return Buffer.isBuffer(stream) ? stream.toString() : String(stream)
   } catch {
@@ -493,7 +488,7 @@ async function pollHealth(ip, port, timeoutMs = 40_000, onProgress = null) {
 }
 
 function isOpenRouterModel(model) {
-  return OPENROUTER_API_KEY && (model.startsWith('openrouter/') || model.includes(':'))
+  return config.openrouterKey && (model.startsWith('openrouter/') || model.includes(':'))
 }
 
 async function buildAndVerify(dir, name, description, onStatus, errorContext = null, model = 'claude-sonnet-4-6') {
@@ -563,7 +558,7 @@ CMD ["npm", "start"]`
   }
 
   // Información final
-  const containers = await docker.listContainers({
+  const containers = await getDocker().listContainers({
     all: true,
     filters: JSON.stringify({ name: [`${name}-app`] }),
   }).catch(() => [])
@@ -625,6 +620,14 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: projectDir(name), model })
 
+    // Start code-server for the project
+    try {
+      await startCodeServer(name, projectDir(name))
+    } catch (err) {
+      console.error('Error starting code-server:', err.message)
+      // Don't fail deployment if code-server fails
+    }
+
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
@@ -643,18 +646,42 @@ _${description}_
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('▶️ Start', `go:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('🗑️ Eliminar', `del:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
+        [Markup.button.callback('▶️ Start', `go:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
+        [Markup.button.callback('⬅️ Lista', 'list')],
       ]),
     })
   }
   return ok
 }
 
-export async function deployRebuild(ctx, name, description, model = 'claude-sonnet-4-6') {
-  const ok = await deployWithRetry(ctx, projectDir(name), name, description, 'rebuild', model)
+export async function deployRebuild(ctx, name, description, model = 'claude-sonnet-4-6', mode = 'patch') {
+  const dir = projectDir(name)
+
+  // Si es un rebuild full, borrar el proyecto primero para recrearlo desde cero
+  if (mode === 'full') {
+    try {
+      await dockerComposeDown(dir)
+      if (existsSync(dir)) {
+        rmSync(dir, { recursive: true, force: true })
+      }
+      mkdirSync(dir, { recursive: true })
+    } catch (err) {
+      console.error('Error limpiando directorio:', err.message)
+    }
+  }
+
+  const ok = await deployWithRetry(ctx, dir, name, description, 'rebuild', model)
   if (ok) {
-    store.set(name, { description, url: projectUrl(name), dir: projectDir(name), model })
+    store.set(name, { description, url: projectUrl(name), dir: dir, model })
+
+    // Start code-server for the project
+    try {
+      await startCodeServer(name, dir)
+    } catch (err) {
+      console.error('Error starting code-server:', err.message)
+      // Don't fail deployment if code-server fails
+    }
 
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
@@ -673,8 +700,9 @@ _${description}_
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('🛑 Stop', `st:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('🗑️ Eliminar', `del:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
+        [Markup.button.callback('🛑 Stop', `st:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
+        [Markup.button.callback('⬅️ Lista', 'list')],
       ]),
     })
   }
@@ -695,12 +723,12 @@ export async function newCommand(ctx) {
   if (store.get(name)) {
     return ctx.reply(`Ya existe "${name}". Usa /rebuild ${name} para actualizarlo.`)
   }
-  if (building.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
+  if (buildingSet.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
 
-  building.add(name)
+  buildingSet.add(name)
   const msg = await ctx.reply('⚙️ Iniciando...', { parse_mode: 'Markdown' })
   const ok = await deployNew(ctx, name, description)
-  building.delete(name)
+  buildingSet.delete(name)
 
   if (ok) {
     return ctx.telegram.editMessageText(
@@ -720,13 +748,13 @@ export async function rebuildCommand(ctx) {
 
   const project = store.get(name)
   if (!project) return ctx.reply(`Proyecto "${name}" no encontrado. Usa /new para crearlo.`)
-  if (building.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
+  if (buildingSet.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
 
-  building.add(name)
+  buildingSet.add(name)
   const description = newDescription || project.description
   const msg = await ctx.reply('♻️ Iniciando...', { parse_mode: 'Markdown' })
   const ok = await deployRebuild(ctx, name, description)
-  building.delete(name)
+  buildingSet.delete(name)
 
   if (ok) {
     return ctx.telegram.editMessageText(
