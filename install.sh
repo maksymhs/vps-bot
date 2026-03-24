@@ -319,7 +319,7 @@ echo ""
 echo -e "${CYAN}━━━ Claude Code Authentication ━━━${NC}\n"
 echo -e "Claude Code needs to be authenticated for the '${VPSBOT_USER}' user."
 echo -e "A URL will appear — open it in your browser to log in.\n"
-su - "$VPSBOT_USER" -c "$(command -v claude || echo claude) auth login" || \
+su - "$VPSBOT_USER" -c "$(command -v claude || echo claude) auth login" </dev/tty >>/dev/tty 2>>/dev/tty || \
     echo -e "${YELLOW}⚠ Auth skipped or failed. Run later: su - ${VPSBOT_USER} -c 'claude auth login'${NC}"
 
 echo ""
