@@ -216,36 +216,38 @@ fi
 
 # Start code-server
 if command -v code-server &> /dev/null; then
-    if pgrep -x "code-server" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Code-Server already running${NC}"
-    else
-        echo -e "${YELLOW}Starting Code-Server on port ${CS_PORT}...${NC}"
-        CS_BIND="0.0.0.0:${CS_PORT}"
-        if [ -n "$DOMAIN" ]; then
-            CS_BIND="127.0.0.1:${CS_PORT}"
-        fi
-        # Write code-server config (overrides any auto-generated config)
-        mkdir -p "$HOME/.config/code-server"
-        cat > "$HOME/.config/code-server/config.yaml" <<CSEOF
+    # Kill any existing code-server to apply new config
+    pkill -f code-server 2>/dev/null || true
+    sleep 1
+
+    CS_BIND="0.0.0.0:${CS_PORT}"
+    if [ -n "$DOMAIN" ]; then
+        CS_BIND="127.0.0.1:${CS_PORT}"
+    fi
+    CS_PASS="${CODE_SERVER_PASSWORD:-changeme}"
+
+    # Write code-server config
+    mkdir -p "$HOME/.config/code-server"
+    cat > "$HOME/.config/code-server/config.yaml" << EOF
 bind-addr: ${CS_BIND}
 auth: password
-password: ${CODE_SERVER_PASSWORD:-changeme}
+password: ${CS_PASS}
 cert: false
-CSEOF
-        code-server \
-            --disable-telemetry \
-            "${PROJECTS_DIR:-$HOME/vps-code-bot-projects}" &>/dev/null &
-        disown
-        sleep 1
-        if pgrep -x "code-server" > /dev/null 2>&1; then
-            if [ -n "$DOMAIN" ]; then
-                echo -e "${GREEN}✓ Code-Server started → https://code.${DOMAIN}${NC}"
-            else
-                echo -e "${GREEN}✓ Code-Server started → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT}${NC}"
-            fi
+EOF
+
+    echo -e "${YELLOW}Starting Code-Server (bind=${CS_BIND})...${NC}"
+    code-server --disable-telemetry "${PROJECTS_DIR:-$HOME/vps-code-bot-projects}" &>/dev/null &
+    disown
+    sleep 2
+
+    if pgrep -f "code-server" > /dev/null 2>&1; then
+        if [ -n "$DOMAIN" ]; then
+            echo -e "${GREEN}✓ Code-Server → https://code.${DOMAIN}${NC}"
         else
-            echo -e "${YELLOW}⚠ Code-Server failed to start${NC}"
+            echo -e "${GREEN}✓ Code-Server → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT}${NC}"
         fi
+    else
+        echo -e "${YELLOW}⚠ Code-Server failed to start${NC}"
     fi
 else
     echo -e "${YELLOW}⚠ Code-Server not installed (optional)${NC}"

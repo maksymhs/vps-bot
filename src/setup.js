@@ -168,51 +168,28 @@ async function runSetupWizard() {
       ipAddress = ipInput.ip
     }
 
-    const portConfig = await inquirer.prompt([{
-      type: 'input',
-      name: 'port',
-      message: 'Base port for apps:',
-      default: '80',
-      validate: (input) => isValidPort(input) ? true : 'Invalid port (1-65535)',
-    }])
-    port = portConfig.port
+    port = '80'
   }
 
   // Code-Server configuration
   console.log(chalk.cyan('\n━━━ Code-Server Configuration ━━━\n'))
   if (networkType.type === 'domain') {
-    console.log(chalk.gray(`Code-Server will be available at: https://code.${domain}`))
-    console.log(chalk.gray('Caddy will auto-manage SSL certificates\n'))
+    console.log(chalk.gray(`Code-Server: https://code.${domain} (SSL auto)\n`))
   } else {
-    console.log(chalk.gray(`Code-Server will be available at: http://${ipAddress || 'localhost'}:<port>\n`))
+    console.log(chalk.gray(`Code-Server: http://${ipAddress}:8080\n`))
   }
 
-  const codeServerPrompts = [
-    {
-      type: 'password',
-      name: 'password',
-      message: 'Code-Server password (for security):',
-      default: Math.random().toString(36).substring(2, 15),
-      validate: (input) => {
-        if (!input) return 'Password is required'
-        if (input.length < 6) return 'Password must be at least 6 characters'
-        return true
-      },
+  const codeServerConfig = await inquirer.prompt([{
+    type: 'input',
+    name: 'password',
+    message: 'Code-Server password:',
+    validate: (input) => {
+      if (!input) return 'Password is required'
+      if (input.length < 4) return 'Min 4 characters'
+      return true
     },
-  ]
-
-  if (networkType.type !== 'domain') {
-    codeServerPrompts.push({
-      type: 'input',
-      name: 'port',
-      message: 'Code-Server port:',
-      default: '8080',
-      validate: (input) => isValidPort(input) ? true : 'Invalid port (1-65535)',
-    })
-  }
-
-  const codeServerConfig = await inquirer.prompt(codeServerPrompts)
-  const codeServerPort = codeServerConfig.port || '8080'
+  }])
+  const codeServerPort = '8080'
 
   // Telegram (optional)
   console.log(chalk.cyan('\n━━━ Telegram Configuration (Optional) ━━━\n'))
