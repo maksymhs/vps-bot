@@ -264,10 +264,5 @@ echo -e "  ${CYAN}npm run cli${NC}    CLI dashboard"
 echo -e "  ${CYAN}npm run setup${NC}  Reconfigure"
 echo ""
 
-# Ask if user wants to start now
-read -p "$(echo -e ${CYAN})Launch VPS-CODE-BOT now? (y/n) $(echo -e ${NC})" -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo ""
-    node src/cli-home.js
-fi
+# Launch directly
+node src/cli-home.js
