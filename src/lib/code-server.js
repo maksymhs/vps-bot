@@ -1,176 +1,135 @@
 import { spawn } from 'child_process'
+import { join } from 'path'
 import { config } from './config.js'
-import { store } from './store.js'
 
 /**
- * Code-Server integration for each project
- * Provides VS Code in the browser for project editing
+ * Code-Server integration — single global instance
+ * Serves all projects from PROJECTS_DIR
+ * Each project opens via ?folder= query param
  */
 
-const codeServerProcesses = new Map()
+let _instance = null
+
+const CODE_SERVER_PORT = parseInt(process.env.CODE_SERVER_BASE_PORT || '8080')
 
 /**
- * Get next available port for code-server
- * Starting from CODE_SERVER_BASE_PORT
+ * Get the base URL for code-server (without folder)
  */
-function getNextPort() {
-  const basePort = parseInt(process.env.CODE_SERVER_BASE_PORT || '8000')
-  let port = basePort
-
-  // Check for used ports
-  for (const [, info] of codeServerProcesses) {
-    if (info.port >= port) {
-      port = info.port + 1
-    }
+function getBaseUrl() {
+  if (config.getNetworkType() === 'domain') {
+    return `https://code.${config.domain}`
   }
-
-  return port
+  return `http://${config.ipAddress || 'localhost'}:${CODE_SERVER_PORT}`
 }
 
 /**
- * Start code-server for a project
+ * Start the global code-server instance pointing to PROJECTS_DIR
  */
-export async function startCodeServer(projectName, projectDir) {
-  // Check if already running
-  if (codeServerProcesses.has(projectName)) {
-    const info = codeServerProcesses.get(projectName)
-    return {
-      success: true,
-      port: info.port,
-      url: generateCodeServerUrl(projectName, info.port),
-      message: 'Code-Server already running',
+export async function ensureCodeServer() {
+  if (_instance?.pid) {
+    try {
+      process.kill(_instance.pid, 0)
+      return { success: true, url: getBaseUrl(), message: 'Code-Server already running' }
+    } catch {
+      _instance = null
     }
   }
 
-  const port = getNextPort()
-  const password = process.env.CODE_SERVER_PASSWORD
+  const password = process.env.CODE_SERVER_PASSWORD || 'changeme'
 
   return new Promise((resolve) => {
     try {
-      // Try to start code-server
       const child = spawn('code-server', [
-        '--bind', `127.0.0.1:${port}`,
-        '--password', password,
+        '--bind-addr', `0.0.0.0:${CODE_SERVER_PORT}`,
+        '--auth', 'password',
         '--disable-telemetry',
-        '--no-auth',
-        projectDir,
+        config.projectsDir,
       ], {
         detached: true,
         stdio: 'ignore',
+        env: { ...process.env, PASSWORD: password },
       })
 
       child.unref()
 
-      // Store process info
-      codeServerProcesses.set(projectName, {
-        port,
+      _instance = {
         pid: child.pid,
+        port: CODE_SERVER_PORT,
         startTime: Date.now(),
-      })
-
-      // Update project with code-server info
-      const project = store.get(projectName)
-      if (project) {
-        store.set(projectName, {
-          ...project,
-          codeServerPort: port,
-        })
       }
 
-      // Give it a moment to start
       setTimeout(() => {
         resolve({
           success: true,
-          port,
-          url: generateCodeServerUrl(projectName, port),
-          message: `Code-Server started on port ${port}`,
+          url: getBaseUrl(),
+          port: CODE_SERVER_PORT,
+          message: `Code-Server started on port ${CODE_SERVER_PORT}`,
         })
-      }, 1000)
+      }, 1500)
     } catch (err) {
       resolve({
         success: false,
         error: err.message,
-        message: 'Failed to start Code-Server. Make sure it\'s installed: npm install -g code-server',
+        message: 'Failed to start Code-Server. Install with: curl -fsSL https://code-server.dev/install.sh | sh',
       })
     }
   })
 }
 
 /**
- * Stop code-server for a project
+ * Stop the global code-server instance
  */
-export function stopCodeServer(projectName) {
-  if (!codeServerProcesses.has(projectName)) {
+export function stopCodeServer() {
+  if (!_instance?.pid) {
     return { success: false, message: 'Code-Server not running' }
   }
 
   try {
-    const info = codeServerProcesses.get(projectName)
-    process.kill(-info.pid) // Kill process group
-    codeServerProcesses.delete(projectName)
-
-    // Update project
-    const project = store.get(projectName)
-    if (project) {
-      const { codeServerPort, ...rest } = project
-      store.set(projectName, rest)
-    }
-
+    process.kill(-_instance.pid)
+    _instance = null
     return { success: true, message: 'Code-Server stopped' }
   } catch (err) {
+    _instance = null
     return { success: false, error: err.message }
   }
 }
 
 /**
- * Get code-server URL for a project
+ * Get the code-server URL for a specific project (opens its folder)
  */
 export function getCodeServerUrl(projectName) {
-  const info = codeServerProcesses.get(projectName)
-  if (!info) return null
-
-  return generateCodeServerUrl(projectName, info.port)
+  const projectDir = join(config.projectsDir, projectName)
+  const base = getBaseUrl()
+  return `${base}/?folder=${encodeURIComponent(projectDir)}`
 }
 
 /**
- * Generate full code-server URL
+ * Get the general code-server URL (no specific folder)
  */
-function generateCodeServerUrl(projectName, port) {
-  const password = process.env.CODE_SERVER_PASSWORD
-  if (config.getNetworkType() === 'domain') {
-    // For domain mode, use subdomain
-    return `https://${projectName}-code.${config.domain}/?password=${password}`
-  } else {
-    // For IP mode, use direct port
-    return `http://${config.ipAddress}:${port}/?password=${password}`
+export function getCodeServerBaseUrl() {
+  return getBaseUrl()
+}
+
+/**
+ * Get code-server status
+ */
+export function getCodeServerStatus() {
+  const running = !!_instance?.pid
+  let alive = false
+
+  if (running) {
+    try {
+      process.kill(_instance.pid, 0)
+      alive = true
+    } catch {
+      _instance = null
+    }
   }
-}
 
-/**
- * Get status of code-server for a project
- */
-export function getCodeServerStatus(projectName) {
-  const info = codeServerProcesses.get(projectName)
   return {
-    running: !!info,
-    port: info?.port,
-    uptime: info ? Date.now() - info.startTime : 0,
-    url: info ? generateCodeServerUrl(projectName, info.port) : null,
+    running: alive,
+    port: alive ? _instance.port : null,
+    uptime: alive ? Date.now() - _instance.startTime : 0,
+    url: alive ? getBaseUrl() : null,
   }
-}
-
-/**
- * List all running code-servers
- */
-export function listCodeServers() {
-  const list = []
-  for (const [name, info] of codeServerProcesses) {
-    list.push({
-      project: name,
-      port: info.port,
-      uptime: Date.now() - info.startTime,
-      url: generateCodeServerUrl(name, info.port),
-    })
-  }
-  return list
 }

@@ -71,9 +71,9 @@ fi
 if ! command -v caddy &> /dev/null; then
     echo -e "${YELLOW}Caddy not found. Installing...${NC}"
     if [ "$OS" = "linux" ]; then
-        sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
-        curl -1sLf 'https://dl.caddy.community/api/v1/repos/caddy/caddy/releases/download?tag=v2.7.6' | sudo apt-key add -
-        echo "deb [trusted=yes] https://dl.caddy.community/apt caddy main" | sudo tee /etc/apt/sources.list.d/caddy-fury.list
+        sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
         sudo apt-get update
         sudo apt-get install -y caddy
     elif [ "$OS" = "macos" ]; then
@@ -99,6 +99,25 @@ fi
 
 echo ""
 
+# Check and install code-server
+if ! command -v code-server &> /dev/null; then
+    echo -e "${YELLOW}Code-Server not found. Installing...${NC}"
+    if [ "$OS" = "linux" ]; then
+        curl -fsSL https://code-server.dev/install.sh | sh
+    elif [ "$OS" = "macos" ]; then
+        brew install code-server
+    fi
+    if command -v code-server &> /dev/null; then
+        echo -e "${GREEN}✓ Code-Server installed${NC}"
+    else
+        echo -e "${YELLOW}⚠ Code-Server installation failed (optional, continuing)${NC}"
+    fi
+else
+    echo -e "${GREEN}✓ Code-Server $(code-server --version 2>/dev/null | head -1 || echo 'installed')${NC}"
+fi
+
+echo ""
+
 # Check npm
 if ! command -v npm &> /dev/null; then
     echo -e "${RED}NPM not found. Please install Node.js.${NC}"
@@ -112,14 +131,74 @@ npm install
 echo ""
 echo -e "${CYAN}━━━ Initial Setup ━━━${NC}\n"
 
-# Run setup
+# Run setup wizard
 node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS"
 
 echo ""
-echo -e "${GREEN}Installation complete!${NC}"
+echo -e "${CYAN}━━━ Infrastructure Setup ━━━${NC}\n"
+
+# Create Docker network 'caddy' if it doesn't exist
+if docker network ls --format '{{.Name}}' | grep -qx 'caddy'; then
+    echo -e "${GREEN}✓ Docker network 'caddy' exists${NC}"
+else
+    echo -e "${YELLOW}Creating Docker network 'caddy'...${NC}"
+    docker network create caddy
+    echo -e "${GREEN}✓ Docker network 'caddy' created${NC}"
+fi
+
+# Ensure Caddy is running (Linux systemd only)
+if [ "$OS" = "linux" ]; then
+    if systemctl is-active --quiet caddy 2>/dev/null; then
+        echo -e "${GREEN}✓ Caddy is running${NC}"
+    else
+        echo -e "${YELLOW}Starting Caddy...${NC}"
+        sudo systemctl enable caddy 2>/dev/null || true
+        sudo systemctl start caddy 2>/dev/null || true
+        if systemctl is-active --quiet caddy 2>/dev/null; then
+            echo -e "${GREEN}✓ Caddy started${NC}"
+        else
+            echo -e "${YELLOW}⚠ Could not start Caddy via systemd. Start it manually if needed.${NC}"
+        fi
+    fi
+elif [ "$OS" = "macos" ]; then
+    if curl -sf http://localhost:2019/config/ > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Caddy Admin API responding${NC}"
+    else
+        echo -e "${YELLOW}⚠ Caddy not running. Start it with: caddy run --config Caddyfile${NC}"
+    fi
+fi
+
+# Ensure Docker is running
+if docker info &> /dev/null; then
+    echo -e "${GREEN}✓ Docker daemon is running${NC}"
+else
+    echo -e "${YELLOW}Starting Docker...${NC}"
+    if [ "$OS" = "linux" ]; then
+        sudo systemctl start docker 2>/dev/null || true
+        sudo systemctl enable docker 2>/dev/null || true
+    fi
+    if docker info &> /dev/null; then
+        echo -e "${GREEN}✓ Docker started${NC}"
+    else
+        echo -e "${RED}⚠ Docker daemon not running. Please start Docker manually.${NC}"
+    fi
+fi
+
 echo ""
-echo "Next steps:"
-echo "  npm start      Launch main menu"
-echo "  npm run bot    Start Telegram bot"
-echo "  npm run cli    Web dashboard"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}          Installation complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
+echo -e "  ${CYAN}npm start${NC}      Launch main menu"
+echo -e "  ${CYAN}npm run bot${NC}    Start Telegram bot"
+echo -e "  ${CYAN}npm run cli${NC}    CLI dashboard"
+echo -e "  ${CYAN}npm run setup${NC}  Reconfigure"
+echo ""
+
+# Ask if user wants to start now
+read -p "$(echo -e ${CYAN})Launch VPS-CODE-BOT now? (y/n) $(echo -e ${NC})" -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    node src/cli-home.js
+fi

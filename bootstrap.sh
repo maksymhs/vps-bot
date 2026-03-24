@@ -11,8 +11,8 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 # Configuration
-REPO_URL="https://github.com/your-username/vps-code-bot.git"
-REPO_NAME="vps-code-bot"
+REPO_URL="${VPS_BOT_REPO_URL:-https://github.com/maksymhs/vps-bot.git}"
+REPO_NAME="vps-bot"
 
 echo -e "${CYAN}"
 echo "┌─────────────────────────────────────────────────────┐"

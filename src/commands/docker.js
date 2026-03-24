@@ -145,7 +145,7 @@ export async function stopCommand(ctx) {
   const info = await findContainer(name)
   if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
 
-  await docker.getContainer(info.Id).stop()
+  await getDocker().getContainer(info.Id).stop()
   return ctx.reply(`🛑 \`${name}\` parado.`, { parse_mode: 'Markdown' })
 }
 
@@ -156,6 +156,6 @@ export async function startCommand(ctx) {
   const info = await findContainer(name)
   if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
 
-  await docker.getContainer(info.Id).start()
+  await getDocker().getContainer(info.Id).start()
   return ctx.reply(`▶️ \`${name}\` arrancado.`, { parse_mode: 'Markdown' })
 }

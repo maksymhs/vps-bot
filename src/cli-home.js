@@ -136,7 +136,7 @@ ${chalk.cyan('Documentation:')}
   ${chalk.gray('TESTING.md')}             Docker testing
 
 ${chalk.cyan('Repository:')}
-  ${chalk.gray('github.com/your-username/vps-code-bot')}
+  ${chalk.gray('github.com/maksymhs/vps-bot')}
 `
   console.log(help)
 }

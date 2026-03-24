@@ -12,7 +12,7 @@ import { getDocker } from './lib/docker-client.js'
 import { buildingSet } from './lib/build-state.js'
 import { config } from './lib/config.js'
 import { getBanner } from './lib/branding.js'
-import { getCodeServerUrl, startCodeServer } from './lib/code-server.js'
+import { getCodeServerUrl, ensureCodeServer } from './lib/code-server.js'
 import { existsSync, rmSync } from 'fs'
 import chalk from 'chalk'
 
@@ -430,24 +430,19 @@ bot.action(/^cs:(.+)$/, async (ctx) => {
   }
 
   try {
-    // Try to get existing code-server URL
-    let url = getCodeServerUrl(name)
-
-    // If not running, start it
-    if (!url) {
-      await ctx.editMessageText(`🚀 Iniciando Code-Server para *${name}*...`, { parse_mode: 'Markdown' })
-      const result = await startCodeServer(name, project.dir)
-      if (result.success) {
-        url = result.url
-      } else {
-        await ctx.editMessageText(`❌ Error: ${result.message}`, { parse_mode: 'Markdown' })
-        await showProject(ctx, name)
-        return
-      }
+    // Ensure global code-server is running
+    await ctx.editMessageText(`🚀 Verificando Code-Server...`, { parse_mode: 'Markdown' })
+    const result = await ensureCodeServer()
+    if (!result.success) {
+      await ctx.editMessageText(`❌ Error: ${result.message}`, { parse_mode: 'Markdown' })
+      await showProject(ctx, name)
+      return
     }
 
-    // Show the URL with a button to open
-    const msg = `💻 *Code-Server - ${name}*\n\n🔗 \`${url}\`\n\n_Haz clic en el enlace para abrir_`
+    // Get project-specific URL (opens folder)
+    const url = getCodeServerUrl(name)
+
+    const msg = `💻 *Code-Server - ${name}*\n\n🔗 \`${url}\`\n\n_Haz clic para abrir el proyecto en VS Code_`
     await ctx.editMessageText(msg, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([

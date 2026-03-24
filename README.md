@@ -7,13 +7,13 @@ Intelligent VPS management platform with automatic application generation powere
 **From anywhere, execute:**
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/your-username/vps-code-bot/main/bootstrap.sh)
+bash <(curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/bootstrap.sh)
 ```
 
 Or manually:
 ```bash
-git clone https://github.com/your-username/vps-code-bot.git
-cd vps-code-bot
+git clone https://github.com/maksymhs/vps-bot.git
+cd vps-bot
 bash bootstrap.sh
 ```
 
@@ -56,13 +56,13 @@ Generate applications by describing requirements, deploy them automatically to D
 
 **Install in one command:**
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/your-username/vps-code-bot/main/install.sh)
+bash <(curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/install.sh)
 ```
 
 Or manually:
 ```bash
-git clone https://github.com/your-username/vps-code-bot.git
-cd vps-code-bot
+git clone https://github.com/maksymhs/vps-bot.git
+cd vps-bot
 bash install.sh
 ```
 

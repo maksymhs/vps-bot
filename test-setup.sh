@@ -2,79 +2,66 @@
 
 set -e
 
-echo "🧪 VPS Bot - Testing Environment Setup"
-echo "======================================"
-echo ""
-
-# Colors
 GREEN='\033[0;32m'
+CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
+
+echo -e "${CYAN}"
+echo "┌─────────────────────────────────────────────────────┐"
+echo "│                                                     │"
+echo "│         VPS-CODE-BOT  TEST ENVIRONMENT             │"
+echo "│      Simulated Ubuntu VPS via Docker                │"
+echo "│                                                     │"
+echo "└─────────────────────────────────────────────────────┘"
+echo -e "${NC}"
 
 # Check Docker
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker no encontrado${NC}"
+if ! docker info &> /dev/null; then
+    echo -e "${RED}Docker is not running. Start Docker Desktop first.${NC}"
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}❌ Docker Compose no encontrado${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Docker y Docker Compose encontrados${NC}"
-echo ""
-
-# Build the image
-echo "🔨 Construyendo imagen del bot..."
-docker-compose -f docker-compose.test.yml build
+# Build
+echo -e "${CYAN}Building simulated VPS image...${NC}"
+docker compose -f docker-compose.test.yml build
 
 echo ""
-echo -e "${GREEN}✅ Imagen construida${NC}"
+echo -e "${GREEN}✓ Image built${NC}"
 echo ""
 
-# Start services
-echo "🚀 Levantando servicios..."
-docker-compose -f docker-compose.test.yml up -d
+# Stop previous if exists
+docker compose -f docker-compose.test.yml down 2>/dev/null || true
+
+# Start
+echo -e "${CYAN}Starting simulated VPS...${NC}"
+docker compose -f docker-compose.test.yml up -d
 
 echo ""
-echo -e "${GREEN}✅ Servicios levantados${NC}"
+echo -e "${GREEN}✓ VPS container running${NC}"
+echo ""
+echo -e "${CYAN}━━━ What to test ━━━${NC}"
+echo ""
+echo -e "  You are now inside a fresh Ubuntu 22.04 with Node.js + Docker CLI."
+echo -e "  The project is at ${GREEN}/opt/vps-bot${NC}"
+echo ""
+echo -e "  ${CYAN}Test install.sh:${NC}"
+echo -e "    bash install.sh"
+echo ""
+echo -e "  ${CYAN}Test setup wizard:${NC}"
+echo -e "    npm run setup"
+echo ""
+echo -e "  ${CYAN}Test CLI:${NC}"
+echo -e "    npm start"
+echo ""
+echo -e "  ${CYAN}Ports exposed to your Mac:${NC}"
+echo -e "    http://localhost:8888   Code-Server"
+echo -e "    http://localhost:3080   Caddy HTTP"
+echo -e "    http://localhost:2019   Caddy Admin API"
+echo ""
+echo -e "${CYAN}━━━ Entering VPS shell... ━━━${NC}"
 echo ""
 
-# Wait for services to be ready
-echo "⏳ Esperando que los servicios estén listos..."
-sleep 5
-
-# Check status
-echo ""
-echo "📊 Estado de los servicios:"
-docker-compose -f docker-compose.test.yml ps
-
-echo ""
-echo "🧪 Testing VPS Bot Environment"
-echo "============================="
-echo ""
-echo "✅ Caddy Admin API: http://localhost:2019"
-echo "✅ Caddy HTTP:      http://localhost:80"
-echo ""
-echo "📝 Próximos pasos:"
-echo ""
-echo "1. Ver logs del bot:"
-echo "   docker-compose -f docker-compose.test.yml logs vps-bot -f"
-echo ""
-echo "2. Acceder a la shell del bot:"
-echo "   docker-compose -f docker-compose.test.yml exec vps-bot sh"
-echo ""
-echo "3. Probar Caddy Admin API:"
-echo "   curl http://localhost:2019/config/"
-echo ""
-echo "4. Ver containers que crea el bot:"
-echo "   docker ps -a"
-echo ""
-echo "5. Parar todo:"
-echo "   docker-compose -f docker-compose.test.yml down"
-echo ""
-echo "6. Limpiar volúmenes (CUIDADO - borra proyectos):"
-echo "   docker-compose -f docker-compose.test.yml down -v"
-echo ""
+# Enter interactive shell
+docker compose -f docker-compose.test.yml exec vps bash -l

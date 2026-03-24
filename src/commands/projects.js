@@ -6,7 +6,6 @@ import { buildingSet } from '../lib/build-state.js'
 import { config } from '../lib/config.js'
 import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
-import { startCodeServer } from '../lib/code-server.js'
 
 const MAX_RETRIES = 2
 
@@ -620,14 +619,6 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: projectDir(name), model })
 
-    // Start code-server for the project
-    try {
-      await startCodeServer(name, projectDir(name))
-    } catch (err) {
-      console.error('Error starting code-server:', err.message)
-      // Don't fail deployment if code-server fails
-    }
-
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
@@ -674,14 +665,6 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
   const ok = await deployWithRetry(ctx, dir, name, description, 'rebuild', model)
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: dir, model })
-
-    // Start code-server for the project
-    try {
-      await startCodeServer(name, dir)
-    } catch (err) {
-      console.error('Error starting code-server:', err.message)
-      // Don't fail deployment if code-server fails
-    }
 
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')

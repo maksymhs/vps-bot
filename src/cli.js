@@ -7,14 +7,20 @@ import { store } from './lib/store.js'
 import { getUsageText } from './lib/usage.js'
 import { statusCommand } from './commands/status.js'
 import { getBanner, PROJECT } from './lib/branding.js'
+import { buildingSet } from './lib/build-state.js'
 import inquirer from 'inquirer'
 import si from 'systeminformation'
 import chalk from 'chalk'
+import { execFile, spawn } from 'child_process'
+import { mkdirSync } from 'fs'
 
-const ctx = {
-  reply: (text) => {
+// CLI context that mimics Telegram bot context for reusing deploy functions
+const cliCtx = {
+  reply: (text, opts) => {
     const plain = text
       .replace(/\*\*/g, '')
+      .replace(/\*/g, '')
+      .replace(/`{3}[\s\S]*?`{3}/g, (m) => m.replace(/`/g, ''))
       .replace(/`/g, '')
       .replace(/_/g, '')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
@@ -128,18 +134,138 @@ async function showProjectMenu(name) {
       console.log(chalk.gray(`\n${project.url}\n`))
       return showProjectMenu(name)
     }
-
-    // TODO: Implement logs, stop, start, rebuild
-    console.log(chalk.yellow(`\n${action} not yet implemented in CLI.\n`))
-    return showProjectMenu(name)
+    if (action === 'logs') {
+      await showLogs(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'stop') {
+      await stopContainer(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'start') {
+      await startContainer(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'rebuild') {
+      await rebuildProject(name)
+      return showProjectMenu(name)
+    }
   } catch (err) {
     console.error(chalk.red(`\nError: ${err.message}\n`))
     return showProjects()
   }
 }
 
+async function showLogs(name) {
+  try {
+    const containers = await getDocker().listContainers({
+      all: true,
+      filters: JSON.stringify({ name: [`${name}-app`] }),
+    })
+    if (!containers.length) {
+      console.log(chalk.yellow(`\nNo container found for "${name}".\n`))
+      return
+    }
+    const stream = await getDocker().getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
+    const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).trim() || '(no logs)'
+    console.log(chalk.cyan(`\nLogs for ${name}:\n`))
+    console.log(text)
+    console.log()
+  } catch (err) {
+    console.error(chalk.red(`\nError fetching logs: ${err.message}\n`))
+  }
+}
+
+async function stopContainer(name) {
+  try {
+    const containers = await getDocker().listContainers({
+      filters: JSON.stringify({ name: [`${name}-app`] }),
+    })
+    if (!containers.length) {
+      console.log(chalk.yellow(`\nNo running container for "${name}".\n`))
+      return
+    }
+    await getDocker().getContainer(containers[0].Id).stop()
+    console.log(chalk.green(`\n${name} stopped.\n`))
+  } catch (err) {
+    console.error(chalk.red(`\nError stopping container: ${err.message}\n`))
+  }
+}
+
+async function startContainer(name) {
+  try {
+    const containers = await getDocker().listContainers({
+      all: true,
+      filters: JSON.stringify({ name: [`${name}-app`] }),
+    })
+    if (!containers.length) {
+      console.log(chalk.yellow(`\nNo container found for "${name}".\n`))
+      return
+    }
+    await getDocker().getContainer(containers[0].Id).start()
+    console.log(chalk.green(`\n${name} started.\n`))
+  } catch (err) {
+    console.error(chalk.red(`\nError starting container: ${err.message}\n`))
+  }
+}
+
+async function rebuildProject(name) {
+  const project = store.get(name)
+  if (!project) {
+    console.log(chalk.red(`\nProject "${name}" not found.\n`))
+    return
+  }
+
+  const { mode } = await inquirer.prompt([{
+    type: 'list',
+    name: 'mode',
+    message: 'Rebuild mode:',
+    choices: [
+      { name: 'Patch — add changes to existing code', value: 'patch' },
+      { name: 'Full — regenerate from scratch', value: 'full' },
+      { name: 'Cancel', value: 'cancel' },
+    ],
+  }])
+
+  if (mode === 'cancel') return
+
+  const { desc } = await inquirer.prompt([{
+    type: 'input',
+    name: 'desc',
+    message: mode === 'patch' ? 'What changes do you want?' : 'New full description:',
+    validate: (input) => input ? true : 'Description is required',
+  }])
+
+  const { model } = await inquirer.prompt([{
+    type: 'list',
+    name: 'model',
+    message: 'Select model:',
+    choices: [
+      { name: 'Sonnet (recommended)', value: 'claude-sonnet-4-6' },
+      { name: 'Opus (more powerful)', value: 'claude-opus-4-6' },
+      { name: 'Haiku (fastest)', value: 'claude-haiku-4-5-20251001' },
+    ],
+  }])
+
+  const description = mode === 'patch'
+    ? `${project.description}\n\nCambios solicitados: ${desc}`
+    : desc
+
+  console.log(chalk.cyan(`\nRebuilding ${name}...\n`))
+
+  try {
+    const { deployRebuild } = await import('./commands/projects.js')
+    const ok = await deployRebuild(cliCtx, name, description, model, mode)
+    if (ok) {
+      console.log(chalk.green(`\n${name} rebuilt successfully!\n`))
+    }
+  } catch (err) {
+    console.error(chalk.red(`\nRebuild failed: ${err.message}\n`))
+  }
+}
+
 async function showNewProject() {
-  const { name, description } = await inquirer.prompt([
+  const { name: rawName, description } = await inquirer.prompt([
     {
       type: 'input',
       name: 'name',
@@ -149,13 +275,53 @@ async function showNewProject() {
     {
       type: 'input',
       name: 'description',
-      message: 'Description:',
+      message: 'Describe what the app should do:',
       validate: (input) => input ? true : 'Description is required',
     },
   ])
 
-  console.log(chalk.cyan(`\nCreating project: ${name}...`))
-  console.log(chalk.gray('(Use Telegram bot or wait for CLI implementation)\n'))
+  const name = rawName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+
+  if (store.get(name)) {
+    console.log(chalk.yellow(`\nProject "${name}" already exists. Use rebuild instead.\n`))
+    return showMainMenu()
+  }
+
+  const { model } = await inquirer.prompt([{
+    type: 'list',
+    name: 'model',
+    message: 'Select model:',
+    choices: [
+      { name: 'Sonnet (recommended)', value: 'claude-sonnet-4-6' },
+      { name: 'Opus (more powerful)', value: 'claude-opus-4-6' },
+      { name: 'Haiku (fastest)', value: 'claude-haiku-4-5-20251001' },
+    ],
+  }])
+
+  const { confirm } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'confirm',
+    message: `Create "${name}" with ${model.includes('opus') ? 'Opus' : model.includes('haiku') ? 'Haiku' : 'Sonnet'}?`,
+    default: true,
+  }])
+
+  if (!confirm) return showMainMenu()
+
+  console.log(chalk.cyan(`\nCreating project: ${name}...\n`))
+
+  try {
+    const { deployNew } = await import('./commands/projects.js')
+    buildingSet.add(name)
+    const ok = await deployNew(cliCtx, name, description, model)
+    buildingSet.delete(name)
+    if (ok) {
+      console.log(chalk.green(`\n${name} created successfully!`))
+      console.log(chalk.gray(`URL: ${config.projectUrl(name)}\n`))
+    }
+  } catch (err) {
+    buildingSet.delete(name)
+    console.error(chalk.red(`\nCreation failed: ${err.message}\n`))
+  }
 
   return showMainMenu()
 }
