@@ -456,26 +456,37 @@ async function configureDomain() {
         detached: true, stdio: 'ignore',
       }).unref()
 
-      // Launch caddy-docker-proxy with code.{domain} → code-server
-      execSync(`docker run -d \
-        --name caddy-proxy \
-        --restart unless-stopped \
-        --network caddy \
-        -p 80:80 -p 443:443 -p 2019:2019 \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v caddy_data:/data \
-        -l "caddy.admin=0.0.0.0:2019" \
-        -l "caddy_0=code.${domain}" \
-        -l "caddy_0.reverse_proxy=host.docker.internal:${csPort}" \
-        --add-host host.docker.internal:host-gateway \
-        lucaslorentz/caddy-docker-proxy:ci-alpine`, { stdio: 'pipe' })
+      // Pull caddy-docker-proxy image
+      console.log(chalk.gray('  Pulling caddy-docker-proxy image...'))
+      execSync('docker pull lucaslorentz/caddy-docker-proxy:ci-alpine', { stdio: 'inherit' })
 
-      console.log(chalk.green(`✓ Caddy running with auto-SSL`))
+      // Launch caddy-docker-proxy with code.{domain} → code-server
+      const dockerCmd = [
+        'docker run -d',
+        '--name caddy-proxy',
+        '--restart unless-stopped',
+        '--network caddy',
+        '-p 80:80 -p 443:443 -p 2019:2019',
+        '-v /var/run/docker.sock:/var/run/docker.sock',
+        '-v caddy_data:/data',
+        '-l "caddy.admin=0.0.0.0:2019"',
+        `-l "caddy_0=code.${domain}"`,
+        `-l "caddy_0.reverse_proxy=host.docker.internal:${csPort}"`,
+        '--add-host host.docker.internal:host-gateway',
+        'lucaslorentz/caddy-docker-proxy:ci-alpine',
+      ].join(' ')
+
+      execSync(dockerCmd, { stdio: 'inherit' })
+
+      console.log(chalk.green(`\n✓ Caddy running with auto-SSL`))
       console.log(chalk.green(`✓ https://code.${domain} → Code-Server`))
       console.log(chalk.green(`✓ https://{app}.${domain} → Project apps`))
     } catch (err) {
-      console.log(chalk.red(`\n⚠ Caddy setup failed: ${err.message}`))
-      console.log(chalk.gray('  Check: docker logs caddy-proxy\n'))
+      const stderr = err.stderr ? err.stderr.toString() : err.message
+      console.log(chalk.red(`\n⚠ Caddy setup failed:`))
+      console.log(chalk.red(`  ${stderr}`))
+      console.log(chalk.gray('\n  Debug: docker ps -a | grep caddy'))
+      console.log(chalk.gray('  Debug: docker logs caddy-proxy\n'))
     }
   } else {
     updateEnvVar('DOMAIN', '', true)
