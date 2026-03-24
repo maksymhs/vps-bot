@@ -4,7 +4,7 @@ import { join } from 'path'
 
 export const config = {
   // Paths
-  projectsDir: process.env.PROJECTS_DIR ?? '/home/vps-code-bot/projects',
+  projectsDir: process.env.PROJECTS_DIR ?? '/home/vpsbot/projects',
   get stateFile() {
     return join(this.projectsDir, 'projects.json')
   },

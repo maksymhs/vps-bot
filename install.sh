@@ -234,7 +234,7 @@ fi
 
 # Setup systemd services (persist after SSH close)
 NODE_BIN=$(which node)
-PROJECTS_DIR="${PROJECTS_DIR:-$HOME/vps-code-bot-projects}"
+PROJECTS_DIR="${PROJECTS_DIR:-/home/vpsbot/projects}"
 mkdir -p "$PROJECTS_DIR"
 
 # Code-Server service (runs as root)
@@ -313,6 +313,14 @@ echo -e "${GRAY}  vps-bot-telegram.service    → start from CLI menu${NC}"
 
 # Give vpsbot user access to projects dir (for Claude Code to write)
 chown -R "${VPSBOT_USER}:${VPSBOT_USER}" "$PROJECTS_DIR" 2>/dev/null || true
+
+# Authenticate Claude Code for vpsbot (OAuth — credentials stored in vpsbot's home)
+echo ""
+echo -e "${CYAN}━━━ Claude Code Authentication ━━━${NC}\n"
+echo -e "Claude Code needs to be authenticated for the '${VPSBOT_USER}' user."
+echo -e "A URL will appear — open it in your browser to log in.\n"
+su - "$VPSBOT_USER" -c "$(command -v claude || echo claude) auth login" || \
+    echo -e "${YELLOW}⚠ Auth skipped or failed. Run later: su - ${VPSBOT_USER} -c 'claude auth login'${NC}"
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
