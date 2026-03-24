@@ -4,8 +4,12 @@ Intelligent VPS management platform with automatic application generation powere
 
 ## One-Command Installation
 
-**From anywhere, execute:**
+**Private repo:**
+```bash
+git clone https://<TOKEN>@github.com/maksymhs/vps-bot.git && cd vps-bot && bash install.sh
+```
 
+**Public repo:**
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/bootstrap.sh)
 ```
