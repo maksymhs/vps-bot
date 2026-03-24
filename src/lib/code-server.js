@@ -10,8 +10,6 @@ import { config } from './config.js'
 
 let _instance = null
 
-const CODE_SERVER_PORT = parseInt(process.env.CODE_SERVER_BASE_PORT || '8080')
-
 /**
  * Get the base URL for code-server (without folder)
  */
@@ -19,7 +17,7 @@ function getBaseUrl() {
   if (config.getNetworkType() === 'domain') {
     return `https://code.${config.domain}`
   }
-  return `http://${config.ipAddress || 'localhost'}:${CODE_SERVER_PORT}`
+  return `http://${config.ipAddress || 'localhost'}:${config.codeServerPort}`
 }
 
 /**
@@ -35,26 +33,30 @@ export async function ensureCodeServer() {
     }
   }
 
-  const password = process.env.CODE_SERVER_PASSWORD || 'changeme'
+  // In domain mode, bind to 127.0.0.1 (Caddy handles SSL + proxy)
+  // In IP mode, bind to 0.0.0.0 (direct access)
+  const bindAddr = config.getNetworkType() === 'domain'
+    ? `127.0.0.1:${config.codeServerPort}`
+    : `0.0.0.0:${config.codeServerPort}`
 
   return new Promise((resolve) => {
     try {
       const child = spawn('code-server', [
-        '--bind-addr', `0.0.0.0:${CODE_SERVER_PORT}`,
+        '--bind-addr', bindAddr,
         '--auth', 'password',
         '--disable-telemetry',
         config.projectsDir,
       ], {
         detached: true,
         stdio: 'ignore',
-        env: { ...process.env, PASSWORD: password },
+        env: { ...process.env, PASSWORD: config.codeServerPassword },
       })
 
       child.unref()
 
       _instance = {
         pid: child.pid,
-        port: CODE_SERVER_PORT,
+        port: config.codeServerPort,
         startTime: Date.now(),
       }
 
@@ -62,8 +64,8 @@ export async function ensureCodeServer() {
         resolve({
           success: true,
           url: getBaseUrl(),
-          port: CODE_SERVER_PORT,
-          message: `Code-Server started on port ${CODE_SERVER_PORT}`,
+          port: config.codeServerPort,
+          message: `Code-Server started on port ${config.codeServerPort}`,
         })
       }, 1500)
     } catch (err) {

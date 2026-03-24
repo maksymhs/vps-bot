@@ -137,38 +137,12 @@ node src/setup.js --claude-cli "$CLAUDE_CLI" --os "$OS"
 echo ""
 echo -e "${CYAN}━━━ Infrastructure Setup ━━━${NC}\n"
 
-# Create Docker network 'caddy' if it doesn't exist
-if docker network ls --format '{{.Name}}' | grep -qx 'caddy'; then
-    echo -e "${GREEN}✓ Docker network 'caddy' exists${NC}"
-else
-    echo -e "${YELLOW}Creating Docker network 'caddy'...${NC}"
-    docker network create caddy
-    echo -e "${GREEN}✓ Docker network 'caddy' created${NC}"
+# Read .env values for infrastructure config
+if [ -f ".env" ]; then
+    source .env 2>/dev/null || true
 fi
 
-# Ensure Caddy is running (Linux systemd only)
-if [ "$OS" = "linux" ]; then
-    if systemctl is-active --quiet caddy 2>/dev/null; then
-        echo -e "${GREEN}✓ Caddy is running${NC}"
-    else
-        echo -e "${YELLOW}Starting Caddy...${NC}"
-        sudo systemctl enable caddy 2>/dev/null || true
-        sudo systemctl start caddy 2>/dev/null || true
-        if systemctl is-active --quiet caddy 2>/dev/null; then
-            echo -e "${GREEN}✓ Caddy started${NC}"
-        else
-            echo -e "${YELLOW}⚠ Could not start Caddy via systemd. Start it manually if needed.${NC}"
-        fi
-    fi
-elif [ "$OS" = "macos" ]; then
-    if curl -sf http://localhost:2019/config/ > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Caddy Admin API responding${NC}"
-    else
-        echo -e "${YELLOW}⚠ Caddy not running. Start it with: caddy run --config Caddyfile${NC}"
-    fi
-fi
-
-# Ensure Docker is running
+# Ensure Docker is running (must be first — other steps depend on it)
 if docker info &> /dev/null; then
     echo -e "${GREEN}✓ Docker daemon is running${NC}"
 else
@@ -182,6 +156,88 @@ else
     else
         echo -e "${RED}⚠ Docker daemon not running. Please start Docker manually.${NC}"
     fi
+fi
+
+# Create Docker network 'caddy' if it doesn't exist
+if docker network ls --format '{{.Name}}' | grep -qx 'caddy'; then
+    echo -e "${GREEN}✓ Docker network 'caddy' exists${NC}"
+else
+    echo -e "${YELLOW}Creating Docker network 'caddy'...${NC}"
+    docker network create caddy
+    echo -e "${GREEN}✓ Docker network 'caddy' created${NC}"
+fi
+
+# Setup Caddy reverse proxy
+CS_PORT="${CODE_SERVER_PORT:-8080}"
+
+if [ -n "$DOMAIN" ]; then
+    echo -e "${CYAN}Setting up Caddy for domain: ${DOMAIN}${NC}"
+
+    # Stop system Caddy if running (we use Docker Caddy instead)
+    sudo systemctl stop caddy 2>/dev/null || true
+    sudo systemctl disable caddy 2>/dev/null || true
+
+    # Remove old caddy-proxy container if exists
+    docker rm -f caddy-proxy 2>/dev/null || true
+
+    # Start caddy-docker-proxy — reads docker-compose labels automatically
+    # Also serves code.{domain} -> code-server
+    docker run -d \
+        --name caddy-proxy \
+        --restart unless-stopped \
+        --network caddy \
+        -p 80:80 \
+        -p 443:443 \
+        -p 2019:2019 \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v caddy_data:/data \
+        -l "caddy.admin=0.0.0.0:2019" \
+        -l "caddy_0=code.${DOMAIN}" \
+        -l "caddy_0.reverse_proxy=host.docker.internal:${CS_PORT}" \
+        --add-host host.docker.internal:host-gateway \
+        lucaslorentz/caddy-docker-proxy:ci-alpine 2>/dev/null
+
+    if docker ps --format '{{.Names}}' | grep -qx 'caddy-proxy'; then
+        echo -e "${GREEN}✓ Caddy running (caddy-docker-proxy)${NC}"
+        echo -e "${GREEN}  → https://code.${DOMAIN} → Code-Server${NC}"
+        echo -e "${GREEN}  → https://{app}.${DOMAIN} → Project containers (auto)${NC}"
+        echo -e "${GREEN}  → SSL certificates managed automatically${NC}"
+    else
+        echo -e "${RED}⚠ Caddy container failed to start. Check: docker logs caddy-proxy${NC}"
+    fi
+else
+    echo -e "${GRAY}IP mode — Caddy not needed (direct port access)${NC}"
+fi
+
+# Start code-server
+if command -v code-server &> /dev/null; then
+    if pgrep -x "code-server" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Code-Server already running${NC}"
+    else
+        echo -e "${YELLOW}Starting Code-Server on port ${CS_PORT}...${NC}"
+        CS_BIND="0.0.0.0:${CS_PORT}"
+        if [ -n "$DOMAIN" ]; then
+            CS_BIND="127.0.0.1:${CS_PORT}"
+        fi
+        PASSWORD="${CODE_SERVER_PASSWORD:-changeme}" code-server \
+            --bind-addr "$CS_BIND" \
+            --auth password \
+            --disable-telemetry \
+            "${PROJECTS_DIR:-$HOME/vps-code-bot-projects}" &>/dev/null &
+        disown
+        sleep 1
+        if pgrep -x "code-server" > /dev/null 2>&1; then
+            if [ -n "$DOMAIN" ]; then
+                echo -e "${GREEN}✓ Code-Server started → https://code.${DOMAIN}${NC}"
+            else
+                echo -e "${GREEN}✓ Code-Server started → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT}${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠ Code-Server failed to start${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠ Code-Server not installed (optional)${NC}"
 fi
 
 echo ""

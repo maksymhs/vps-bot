@@ -174,9 +174,14 @@ async function runSetupWizard() {
 
   // Code-Server configuration
   console.log(chalk.cyan('\n━━━ Code-Server Configuration ━━━\n'))
-  console.log(chalk.gray('Code-Server provides VS Code in the browser for each project\n'))
+  if (networkType.type === 'domain') {
+    console.log(chalk.gray(`Code-Server will be available at: https://code.${domain}`))
+    console.log(chalk.gray('Caddy will auto-manage SSL certificates\n'))
+  } else {
+    console.log(chalk.gray(`Code-Server will be available at: http://${ipAddress || 'localhost'}:<port>\n`))
+  }
 
-  const codeServerConfig = await inquirer.prompt([
+  const codeServerPrompts = [
     {
       type: 'password',
       name: 'password',
@@ -188,7 +193,20 @@ async function runSetupWizard() {
         return true
       },
     },
-  ])
+  ]
+
+  if (networkType.type !== 'domain') {
+    codeServerPrompts.push({
+      type: 'input',
+      name: 'port',
+      message: 'Code-Server port:',
+      default: '8080',
+      validate: (input) => isValidPort(input) ? true : 'Invalid port (1-65535)',
+    })
+  }
+
+  const codeServerConfig = await inquirer.prompt(codeServerPrompts)
+  const codeServerPort = codeServerConfig.port || '8080'
 
   // Telegram (optional)
   console.log(chalk.cyan('\n━━━ Telegram Configuration (Optional) ━━━\n'))
@@ -263,7 +281,7 @@ NODE_BIN=${process.env.NODE_BIN || '/usr/bin/node'}
 
 # Code-Server Configuration
 CODE_SERVER_PASSWORD=${codeServerConfig.password}
-CODE_SERVER_BASE_PORT=8000
+CODE_SERVER_PORT=${codeServerPort}
 
 # Telegram (optional)
 ${chatId ? `BOT_TOKEN=${telegramConfig.botToken}\nCHAT_ID=${chatId}` : `# BOT_TOKEN=\n# CHAT_ID=`}
@@ -287,7 +305,11 @@ DOCKER_SOCKET=/var/run/docker.sock
   }
   console.log(`  Projects:    ${storageConfig.projectsDir}`)
   console.log(`  Claude:      ${cliPath}`)
-  console.log(`  Code-Server: Enabled (password protected)`)
+  if (networkType.type === 'domain') {
+    console.log(`  Code-Server: https://code.${domain} (SSL auto)`)
+  } else {
+    console.log(`  Code-Server: http://${ipAddress}:${codeServerPort}`)
+  }
   console.log(`  Telegram:    ${chatId ? 'configured' : 'disabled'}\n`)
 
   console.log(chalk.green('Setup complete!\n'))

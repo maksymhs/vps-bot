@@ -41,6 +41,10 @@ export const config = {
   nodeBin: process.env.NODE_BIN ?? '/usr/bin/node',
   openrouterKey: process.env.OPENROUTER_API_KEY ?? null,
 
+  // Code-Server
+  codeServerPort: parseInt(process.env.CODE_SERVER_PORT ?? '8080'),
+  codeServerPassword: process.env.CODE_SERVER_PASSWORD ?? 'changeme',
+
   // Caddy Admin API
   caddyAdminUrl: process.env.CADDY_ADMIN_URL ?? 'http://localhost:2019',
 
