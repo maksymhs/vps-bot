@@ -199,17 +199,6 @@ vps-code-bot/
 - **CLI UI** — Inquirer.js
 - **Data Storage** — JSON files
 
-## Docker Testing
-
-To test in isolated Docker environment:
-
-```bash
-chmod +x test-setup.sh
-./test-setup.sh
-```
-
-See [TESTING.md](TESTING.md) for details.
-
 ## Security
 
 - Bot token stored in `.env` (never committed)
@@ -240,7 +229,6 @@ echo $CLAUDE_CLI   # Should match .env value
 
 ## Documentation
 
-- [TESTING.md](TESTING.md) — Docker testing setup
 - `.env.example` — Configuration template
 - `src/setup.js` — Configuration wizard
 - `src/cli-home.js` — Main menu
