@@ -1,241 +1,228 @@
 # VPS-CODE-BOT
 
-Intelligent VPS management platform with automatic application generation powered by Claude Code.
+Intelligent VPS management platform — describe an app, get it running with Docker + SSL in minutes.
 
-## One-Command Installation
+## Quick Start
 
-**Private repo:**
 ```bash
 git clone https://<TOKEN>@github.com/maksymhs/vps-bot.git && cd vps-bot && bash install.sh
 ```
 
-**Public repo:**
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/bootstrap.sh)
+The installer automatically:
+- Creates a `vpsbot` user (non-root, required by Claude Code)
+- Installs Node.js, Docker, Caddy, Claude Code CLI, code-server
+- Runs setup wizard (only asks for code-server password)
+- Auto-detects server IP
+- Creates systemd services (persist after SSH close)
+- Launches the CLI dashboard
+
+## What It Does
+
+1. **Describe** what app you want
+2. **Claude Code** generates the full project (Express + Docker)
+3. **Docker** builds and deploys as an isolated container
+4. **Caddy** exposes it with SSL on `{app}.yourdomain.com`
+
+Everything managed from an interactive CLI menu or Telegram bot.
+
+## CLI Dashboard
+
+```
+? Navigation
+❯ View Projects
+  Create New Project
+  Server Status
+  Docker Containers
+  ─────────────────
+  Configuration
+  Exit
 ```
 
-Or manually:
-```bash
-git clone https://github.com/maksymhs/vps-bot.git
-cd vps-bot
-bash bootstrap.sh
+### Configuration Menu
+
+All settings configurable from the CLI — no need to edit files:
+
+```
+Current Configuration:
+
+  Server IP:   185.x.x.x
+  Domain:      maksym.site (SSL)
+  Code-Server: https://code.maksym.site
+  Claude Code: logged in
+  Telegram:    running
+
+? Configure:
+  Configure Claude Code      ← install + login
+  Set Custom Domain          ← auto SSL with Caddy
+  Set Telegram Bot           ← auto-detect Chat ID
+  🟢 Telegram Bot (running)  ← start/stop/restart
+  Change Code-Server Password
 ```
 
-**The installer will automatically:**
-- Clone repository (if needed)
-- Detect your OS (Linux/macOS)
-- Install Node.js, Docker, Caddy (if missing)
-- Validate Claude Code CLI installation
-- Launch interactive setup wizard
-- Configure network (domain or IP+port)
-- Setup projects directory
-- Optionally configure Telegram bot
-- Start the system
+### Create New Project
 
-## Overview
-
-VPS-CODE-BOT is a professional-grade infrastructure automation platform that combines:
-- **Claude Code** for intelligent code generation (required)
-- **Docker** for application containerization
-- **Caddy** for reverse proxy and SSL
-- **Telegram** for remote control (optional)
-- **Interactive CLI** for local management
-
-Generate applications by describing requirements, deploy them automatically to Docker, and manage everything via web dashboard (Telegram optional).
-
-## Features
-
-- **Intelligent Code Generation** — Describe what you need, Claude Code generates complete applications
-- **Automated Deployment** — Build and deploy as isolated Docker containers
-- **Flexible Networking** — Use custom domain OR IP+port, you decide
-- **Reverse Proxy** — Caddy automatically exposes applications with SSL (domain mode)
-- **Remote Control** — Manage infrastructure via Telegram (optional)
-- **Web Dashboard** — Interactive CLI for local management
-- **Smart Rebuilds** — Apply patches or rebuild from scratch
-- **System Monitoring** — Real-time logs, status, container management
-
-## Installation
-
-**Prerequisites:** Git, bash
-
-**Install in one command:**
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/install.sh)
+```
+? Project name: my-app
+? Describe what the app should do: A real-time chat application with rooms
+? Select model:
+❯ Sonnet (recommended)
+  Opus (more powerful)
+  Haiku (fastest)
+? Create "my-app" with Sonnet?
+❯ → Create project
+  ← Back
 ```
 
-Or manually:
-```bash
-git clone https://github.com/maksymhs/vps-bot.git
-cd vps-bot
-bash install.sh
-```
+Before creating, the CLI checks:
+- Is Claude Code installed? → offers to install
+- Is Claude Code logged in? → launches `claude login` for OAuth
 
-## After Installation
+## Domain + SSL Setup
 
-```bash
-npm start      # Launch main menu
-npm run bot    # Start Telegram bot (if configured)
-npm run cli    # Web dashboard
-```
+From **Configuration → Set Custom Domain**:
 
-## Commands
+1. Shows DNS instructions:
+   ```
+   Add these DNS records pointing to 185.x.x.x:
+     A  maksym.site      → 185.x.x.x
+     A  *.maksym.site    → 185.x.x.x
+   ```
+2. Stops system Caddy, frees ports 80/443
+3. Pulls and launches `caddy-docker-proxy`
+4. Routes `code.maksym.site` → code-server
+5. Routes `{app}.maksym.site` → project containers
+6. SSL certificates auto-managed by Let's Encrypt
 
-```bash
-npm start      # Main menu
-npm run setup  # Reconfigure
-npm run bot    # Telegram bot
-npm run cli    # Web dashboard
-npm run dev    # Development mode (watch)
-```
+Leave domain empty to switch back to IP mode.
 
-## Requirements
+## Telegram Bot
 
-**Automatically installed by `install.sh`:**
-- Node.js 18+
-- Docker
-- Caddy
+From **Configuration → Set Telegram Bot**:
 
-**Manual requirement:**
-- **Claude Code CLI** (download from https://claude.com/download)
+1. Instructions to create bot via `@BotFather`
+2. Enter bot token
+3. **Auto-detect Chat ID** — send a message to your bot, select auto-detect
+4. Start bot as systemd service (background)
 
-## Configuration
-
-### Initial Setup
-The `install.sh` script will guide you through:
-1. **Choosing network mode:**
-   - Domain (example.com) — Uses Caddy with automatic SSL
-   - IP+Port (192.168.1.1:8080) — Direct IP access
-2. **Claude Code path** — Auto-detected or provide manually
-3. **Telegram (optional)** — Leave blank to skip
-4. **Projects directory** — Where applications are stored
-
-### Manual Configuration
-Edit `.env` file:
-
-```bash
-# Network - Choose ONE:
-DOMAIN=example.com              # For domain mode
-# OR
-IP_ADDRESS=192.168.1.100        # For IP mode
-PORT=8080
-
-# Required
-CLAUDE_CLI=/path/to/claude-code/cli.js
-PROJECTS_DIR=/home/user/vps-code-bot-projects
-
-# Optional
-BOT_TOKEN=your_telegram_token
-CHAT_ID=your_chat_id
-```
-
-### Reconfigure Later
-```bash
-npm run setup
-```
+Manage from **🟢 Telegram Bot** → Start / Stop / Restart
 
 ## Architecture
 
 ```
-User Input
-    |
-    +--- Telegram Bot ──┐
-    |                   |
-    +--- Web Dashboard  |
-                        |
-                    VPS-CODE-BOT
-                        |
-        ┌───────────────┼───────────────┐
-        |               |               |
-    Claude Code    Docker Client    Config
-        |               |
-        v               v
-    Generate        Containers
-    Code
-        |
-        v
-    Docker Registry
-        |
-        v
-    Running Apps
+┌──────────┐     ┌──────────┐
+│ CLI Menu │     │ Telegram │
+└────┬─────┘     └────┬─────┘
+     │                │
+     └───────┬────────┘
+             │
+      VPS-CODE-BOT (vpsbot user)
+             │
+   ┌─────────┼──────────┐
+   │         │          │
+Claude    Docker     Caddy
+ Code     Build    (auto SSL)
+   │         │          │
+   v         v          v
+ Source → Container → https://{app}.domain
 ```
 
-## Workflow
+## Services & Persistence
 
-1. **Describe** — Tell the system what application you need
-2. **Generate** — Claude Code generates complete source code
-3. **Build** — Docker builds container image
-4. **Deploy** — Container starts and health checks pass
-5. **Expose** — Caddy reverse proxy makes it accessible
+Everything runs as systemd services under the `vpsbot` user:
+
+| Service | Description | Auto-start |
+|---------|-------------|------------|
+| `code-server.service` | Code-Server IDE | Yes |
+| `vps-bot-telegram.service` | Telegram bot | From CLI menu |
+| `caddy-proxy` (Docker) | Reverse proxy + SSL | Yes (restart policy) |
+
+**Close SSH → everything keeps running. Reboot → services auto-start.**
+
+## After Installation
+
+```bash
+# Launch CLI dashboard
+su - vpsbot -c 'cd ~/vps-bot && npm start'
+
+# Or switch to vpsbot user
+su - vpsbot
+cd ~/vps-bot
+npm start
+```
 
 ## Project Structure
 
 ```
-vps-code-bot/
-├── src/
-│   ├── bot.js              # Telegram bot entry point
-│   ├── cli.js              # Web dashboard
-│   ├── cli-home.js         # Main menu screen
-│   ├── setup.js            # Configuration wizard
-│   ├── commands/
-│   │   ├── projects.js     # Project management
-│   │   ├── docker.js       # Docker operations
-│   │   ├── git.js          # Git operations
-│   │   └── menu.js         # UI components
-│   └── lib/
-│       ├── config.js       # Configuration management
-│       ├── docker-client.js# Docker singleton
-│       ├── store.js        # Data persistence
-│       ├── branding.js     # Project branding
-│       └── caddy.js        # Caddy Admin API
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
-└── README.md
+/home/vpsbot/
+├── vps-bot/                    # Platform code
+│   ├── src/
+│   │   ├── bot.js              # Telegram bot
+│   │   ├── cli.js              # CLI dashboard + config
+│   │   ├── cli-home.js         # Entry point
+│   │   ├── setup.js            # Setup wizard
+│   │   ├── commands/
+│   │   │   ├── projects.js     # Claude Code + Docker deploy
+│   │   │   ├── docker.js       # Container management
+│   │   │   └── menu.js         # Telegram UI
+│   │   └── lib/
+│   │       ├── config.js       # Environment config
+│   │       ├── code-server.js  # Code-Server management
+│   │       ├── docker-client.js
+│   │       ├── store.js        # Project state (JSON)
+│   │       └── caddy.js        # Caddy Admin API
+│   ├── install.sh              # One-command installer
+│   ├── bootstrap.sh            # Remote installer
+│   └── .env                    # Configuration (auto-generated)
+└── vps-code-bot-projects/      # Generated apps
+    ├── my-app/
+    │   ├── src/index.js
+    │   ├── package.json
+    │   ├── Dockerfile
+    │   └── docker-compose.yml
+    └── another-app/
 ```
 
-## Technology Stack
+## Tech Stack
 
-- **Runtime** — Node.js 18+
-- **Bot Framework** — Telegraf
-- **Code Generation** — Claude Code CLI
-- **Containerization** — Docker & Docker Compose
-- **Reverse Proxy** — Caddy
-- **CLI UI** — Inquirer.js
-- **Data Storage** — JSON files
+- **Runtime** — Node.js 20
+- **AI** — Claude Code CLI (Sonnet / Opus / Haiku)
+- **Containers** — Docker + Docker Compose
+- **Reverse Proxy** — Caddy (caddy-docker-proxy)
+- **IDE** — code-server (VS Code in browser)
+- **Bot** — Telegraf (Telegram)
+- **CLI** — Inquirer.js
+- **Services** — systemd
 
 ## Security
 
-- Bot token stored in `.env` (never committed)
-- Single-user access via Telegram CHAT_ID
-- Docker socket access restricted to local
-- Applications isolated in containers
-- HTTPS via Caddy with automatic certificates
+- Runs as non-root `vpsbot` user
+- Bot token + passwords in `.env` (gitignored)
+- Single-user Telegram access via `CHAT_ID`
+- Docker socket restricted to `vpsbot` group
+- Apps isolated in Docker containers
+- HTTPS with auto-renewed Let's Encrypt certificates
 
 ## Troubleshooting
 
-### System not configured
 ```bash
-npm run setup
+# Check services
+systemctl status code-server
+systemctl status vps-bot-telegram
+docker ps                        # Check caddy-proxy + app containers
+docker logs caddy-proxy          # SSL/proxy issues
+
+# Reconfigure
+su - vpsbot -c 'cd ~/vps-bot && npm run setup'
+
+# Claude Code issues
+su - vpsbot -c 'claude --version'
+su - vpsbot -c 'claude auth status'
+su - vpsbot -c 'claude login'
+
+# Logs
+journalctl -u code-server -f
+journalctl -u vps-bot-telegram -f
 ```
-
-### Bot won't start
-Check that `.env` file exists with valid configuration:
-```bash
-cat .env
-```
-
-### Docker containers not building
-Check Claude Code CLI is properly installed:
-```bash
-which claude-code
-echo $CLAUDE_CLI   # Should match .env value
-```
-
-## Documentation
-
-- `.env.example` — Configuration template
-- `src/setup.js` — Configuration wizard
-- `src/cli-home.js` — Main menu
 
 ## License
 
@@ -243,4 +230,4 @@ MIT
 
 ---
 
-**VPS-CODE-BOT** — Intelligent VPS Management Platform
+**VPS-CODE-BOT** — Describe → Generate → Deploy → Done.
