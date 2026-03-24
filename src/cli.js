@@ -93,7 +93,7 @@ async function showSystemLogs() {
     console.log()
   }
   await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
-  return mainMenu()
+  return showMainMenu()
 }
 
 async function showProjects() {
