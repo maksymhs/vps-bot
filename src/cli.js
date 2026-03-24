@@ -421,7 +421,21 @@ async function configureDomain() {
     updateEnvVar('DOMAIN', domain)
     updateEnvVar('IP_ADDRESS', '', true)
 
-    console.log(chalk.yellow(`\nSetting up Caddy SSL for *.${domain}...\n`))
+    // Detect server IP for DNS instructions
+    let serverIp = config.ipAddress || 'localhost'
+    try {
+      serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo 'YOUR_SERVER_IP'", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+    } catch {}
+
+    console.log(chalk.cyan(`\n━━━ DNS Configuration Required ━━━\n`))
+    console.log(chalk.yellow(`  Add these DNS records pointing to ${chalk.bold(serverIp)}:\n`))
+    console.log(`    ${chalk.bold('A')}  ${domain}        → ${serverIp}`)
+    console.log(`    ${chalk.bold('A')}  *.${domain}      → ${serverIp}`)
+    console.log()
+    console.log(chalk.gray(`  This covers code.${domain} and all {app}.${domain} subdomains.`))
+    console.log(chalk.gray(`  SSL certificates are auto-managed by Caddy (Let's Encrypt).\n`))
+
+    console.log(chalk.yellow(`Setting up Caddy SSL for *.${domain}...\n`))
 
     const csPort = config.codeServerPort || 8080
 
