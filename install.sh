@@ -214,19 +214,18 @@ else
     echo -e "${GRAY}IP mode — Caddy not needed (direct port access)${NC}"
 fi
 
-# Start code-server
-if command -v code-server &> /dev/null; then
-    # Kill any existing code-server to apply new config
-    pkill -f code-server 2>/dev/null || true
-    sleep 1
+# Setup systemd services (persist after SSH close)
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NODE_BIN=$(which node)
 
+# Code-Server service
+if command -v code-server &> /dev/null; then
     CS_BIND="0.0.0.0:${CS_PORT}"
     if [ -n "$DOMAIN" ]; then
         CS_BIND="127.0.0.1:${CS_PORT}"
     fi
     CS_PASS="${CODE_SERVER_PASSWORD:-changeme}"
 
-    # Write code-server config
     mkdir -p "$HOME/.config/code-server"
     cat > "$HOME/.config/code-server/config.yaml" << EOF
 bind-addr: ${CS_BIND}
@@ -235,23 +234,63 @@ password: ${CS_PASS}
 cert: false
 EOF
 
-    echo -e "${YELLOW}Starting Code-Server (bind=${CS_BIND})...${NC}"
-    code-server --disable-telemetry "${PROJECTS_DIR:-$HOME/vps-code-bot-projects}" &>/dev/null &
-    disown
+    cat > /etc/systemd/system/code-server.service << EOF
+[Unit]
+Description=Code Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$(which code-server) --disable-telemetry ${PROJECTS_DIR:-$HOME/vps-code-bot-projects}
+Restart=always
+RestartSec=5
+Environment=HOME=$HOME
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable code-server
+    systemctl restart code-server
     sleep 2
 
-    if pgrep -f "code-server" > /dev/null 2>&1; then
+    if systemctl is-active --quiet code-server; then
         if [ -n "$DOMAIN" ]; then
-            echo -e "${GREEN}✓ Code-Server → https://code.${DOMAIN}${NC}"
+            echo -e "${GREEN}✓ Code-Server → https://code.${DOMAIN} (systemd)${NC}"
         else
-            echo -e "${GREEN}✓ Code-Server → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT}${NC}"
+            echo -e "${GREEN}✓ Code-Server → http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${CS_PORT} (systemd)${NC}"
         fi
     else
-        echo -e "${YELLOW}⚠ Code-Server failed to start${NC}"
+        echo -e "${YELLOW}⚠ Code-Server service failed to start${NC}"
     fi
 else
     echo -e "${YELLOW}⚠ Code-Server not installed (optional)${NC}"
 fi
+
+# Telegram Bot service
+cat > /etc/systemd/system/vps-bot-telegram.service << EOF
+[Unit]
+Description=VPS-CODE-BOT Telegram Bot
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${NODE_BIN} src/bot.js
+Restart=always
+RestartSec=10
+EnvironmentFile=${INSTALL_DIR}/.env
+Environment=HOME=$HOME
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+echo -e "${GREEN}✓ Systemd services installed (persist after SSH close)${NC}"
+echo -e "${GRAY}  code-server.service         → auto-start${NC}"
+echo -e "${GRAY}  vps-bot-telegram.service    → start from CLI menu${NC}"
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -259,9 +298,10 @@ echo -e "${GREEN}          Installation complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "  ${CYAN}npm start${NC}      Launch main menu"
-echo -e "  ${CYAN}npm run bot${NC}    Start Telegram bot"
 echo -e "  ${CYAN}npm run cli${NC}    CLI dashboard"
 echo -e "  ${CYAN}npm run setup${NC}  Reconfigure"
+echo ""
+echo -e "  ${GREEN}Services persist after closing SSH!${NC}"
 echo ""
 
 # Launch directly

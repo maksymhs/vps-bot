@@ -485,7 +485,7 @@ async function showConfig() {
   console.log(`  Claude Code: ${claudeStatus}`)
   // Telegram status
   let botRunning = false
-  try { execSync('pgrep -f "node src/bot.js"', { stdio: 'ignore' }); botRunning = true } catch {}
+  try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); botRunning = true } catch {}
   const telegramStatus = !process.env.BOT_TOKEN
     ? chalk.gray('not set')
     : botRunning ? chalk.green('running') : chalk.yellow('configured (stopped)')
@@ -778,20 +778,17 @@ async function offerStartBot() {
 }
 
 function startBotBackground() {
-  try { execSync('pkill -f "node src/bot.js"', { stdio: 'ignore' }) } catch {}
-  const child = spawn('node', ['src/bot.js'], {
-    cwd: dirname(envFile),
-    detached: true,
-    stdio: 'ignore',
-    env: process.env,
-  })
-  child.unref()
-  console.log(chalk.green('\n✓ Telegram bot started in background (PID: ' + child.pid + ')\n'))
+  try {
+    execSync('systemctl enable vps-bot-telegram && systemctl restart vps-bot-telegram', { stdio: 'inherit' })
+    console.log(chalk.green('\n✓ Telegram bot started (systemd service)\n'))
+  } catch {
+    console.log(chalk.red('\n✗ Failed to start bot service. Run install.sh first.\n'))
+  }
 }
 
 function stopBot() {
   try {
-    execSync('pkill -f "node src/bot.js"', { stdio: 'ignore' })
+    execSync('systemctl stop vps-bot-telegram', { stdio: 'inherit' })
     console.log(chalk.green('\n✓ Telegram bot stopped\n'))
   } catch {
     console.log(chalk.gray('\nBot was not running.\n'))
@@ -800,7 +797,7 @@ function stopBot() {
 
 async function manageTelegramBot() {
   let running = false
-  try { execSync('pgrep -f "node src/bot.js"', { stdio: 'ignore' }); running = true } catch {}
+  try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); running = true } catch {}
 
   const choices = running
     ? [
