@@ -224,9 +224,15 @@ if command -v code-server &> /dev/null; then
         if [ -n "$DOMAIN" ]; then
             CS_BIND="127.0.0.1:${CS_PORT}"
         fi
-        PASSWORD="${CODE_SERVER_PASSWORD:-changeme}" code-server \
-            --bind-addr "$CS_BIND" \
-            --auth password \
+        # Write code-server config (overrides any auto-generated config)
+        mkdir -p "$HOME/.config/code-server"
+        cat > "$HOME/.config/code-server/config.yaml" <<CSEOF
+bind-addr: ${CS_BIND}
+auth: password
+password: ${CODE_SERVER_PASSWORD:-changeme}
+cert: false
+CSEOF
+        code-server \
             --disable-telemetry \
             "${PROJECTS_DIR:-$HOME/vps-code-bot-projects}" &>/dev/null &
         disown

@@ -1,5 +1,7 @@
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { mkdirSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
 import { config } from './config.js'
 
 /**
@@ -39,17 +41,22 @@ export async function ensureCodeServer() {
     ? `127.0.0.1:${config.codeServerPort}`
     : `0.0.0.0:${config.codeServerPort}`
 
+  // Write config.yaml so code-server uses our password
+  try {
+    const csConfigDir = join(homedir(), '.config', 'code-server')
+    mkdirSync(csConfigDir, { recursive: true })
+    writeFileSync(join(csConfigDir, 'config.yaml'),
+      `bind-addr: ${bindAddr}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
+  } catch {}
+
   return new Promise((resolve) => {
     try {
       const child = spawn('code-server', [
-        '--bind-addr', bindAddr,
-        '--auth', 'password',
         '--disable-telemetry',
         config.projectsDir,
       ], {
         detached: true,
         stdio: 'ignore',
-        env: { ...process.env, PASSWORD: config.codeServerPassword },
       })
 
       child.unref()
