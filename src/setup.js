@@ -225,22 +225,11 @@ async function runSetupWizard() {
     }
   }
 
-  // Projects directory
-  console.log(chalk.cyan('\n━━━ Storage Configuration ━━━\n'))
-
-  const storageConfig = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'projectsDir',
-      message: 'Projects directory:',
-      default: `${process.env.HOME}/vps-code-bot-projects`,
-    },
-  ])
-
-  // Create projects directory
+  // Projects directory (always default)
+  const storageConfig = { projectsDir: `${process.env.HOME}/vps-code-bot-projects` }
   try {
     mkdirSync(storageConfig.projectsDir, { recursive: true })
-    console.log(chalk.green(`✓ Directory created: ${storageConfig.projectsDir}\n`))
+    console.log(chalk.green(`✓ Projects dir: ${storageConfig.projectsDir}\n`))
   } catch (err) {
     console.error(chalk.red(`✗ Error creating directory: ${err.message}`))
     process.exit(1)
