@@ -314,14 +314,6 @@ echo -e "${GRAY}  vps-bot-telegram.service    → start from CLI menu${NC}"
 # Give vpsbot user access to projects dir (for Claude Code to write)
 chown -R "${VPSBOT_USER}:${VPSBOT_USER}" "$PROJECTS_DIR" 2>/dev/null || true
 
-# Authenticate Claude Code for vpsbot (OAuth — credentials stored in vpsbot's home)
-echo ""
-echo -e "${CYAN}━━━ Claude Code Authentication ━━━${NC}\n"
-echo -e "Claude Code needs to be authenticated for the '${VPSBOT_USER}' user."
-echo -e "A URL will appear — open it in your browser to log in.\n"
-sudo -u "$VPSBOT_USER" -i claude auth login </dev/tty >/dev/tty 2>/dev/tty || \
-    echo -e "${YELLOW}⚠ Auth skipped or failed. Run later: sudo -u ${VPSBOT_USER} -i claude auth login${NC}"
-
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}          Installation complete!${NC}"
@@ -335,6 +327,8 @@ echo -e "  ${GREEN}Services persist after closing SSH!${NC}"
 echo -e "  ${GRAY}Claude Code runs as '${VPSBOT_USER}' user (non-root)${NC}"
 echo ""
 
-# Launch directly
-cd "$INSTALL_DIR"
-node src/cli-home.js
+# Claude auth as last step — exec replaces this process so TTY works fully
+echo -e "${CYAN}━━━ Claude Code Authentication ━━━${NC}\n"
+echo -e "Last step: authenticate Claude Code for the '${VPSBOT_USER}' user."
+echo -e "A URL will appear — open it in your browser to log in.\n"
+exec sudo -u "$VPSBOT_USER" -i claude auth login
