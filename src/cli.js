@@ -387,7 +387,9 @@ async function showConfig() {
 
   console.log(chalk.cyan('\nCurrent Configuration:\n'))
   console.log(`  Server IP:   ${serverIp || chalk.gray('unknown')}`)
-  console.log(`  Network:     ${net}`)
+  if (config.domain) {
+    console.log(`  Domain:      ${chalk.green(config.domain)} (SSL)`)
+  }
   console.log(`  Code-Server: ${config.domain ? `https://code.${config.domain}` : `http://${serverIp || config.ipAddress}:${config.codeServerPort}`}`)
   console.log(`  Claude CLI:  ${config.claudeCli || chalk.gray('not set')}`)
   console.log(`  Telegram:    ${config.botToken ? chalk.green('configured') : chalk.gray('not set')}`)
