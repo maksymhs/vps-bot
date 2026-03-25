@@ -86,18 +86,46 @@ async function showMainMenu(clear = true) {
 }
 
 async function showSystemLogs() {
-  if (!existsSync(log.file)) {
+  const { readdirSync } = await import('fs')
+  const logsDir = log.dir
+
+  let logFiles = []
+  try {
+    logFiles = readdirSync(logsDir).filter(f => f.endsWith('.log')).sort()
+  } catch {}
+
+  if (!logFiles.length) {
     console.log(chalk.yellow('\nNo logs yet.\n'))
-  } else {
-    const content = readFileSync(log.file, 'utf8')
+    await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
+    return showConfig()
+  }
+
+  const { file } = await inquirer.prompt([{
+    type: 'list',
+    name: 'file',
+    message: 'Select log file:',
+    loop: false,
+    choices: [
+      ...logFiles.map(f => ({ name: f, value: f })),
+      new inquirer.Separator(),
+      { name: 'Back', value: 'back' },
+    ],
+  }])
+
+  if (file === 'back') return showConfig()
+
+  const filePath = join(logsDir, file)
+  if (existsSync(filePath)) {
+    const content = readFileSync(filePath, 'utf8')
     const lines = content.trim().split('\n')
-    const tail = lines.slice(-40).join('\n')
-    console.log(chalk.cyan(`\n─── Last ${Math.min(lines.length, 40)} lines of ${log.file} ───\n`))
+    const tail = lines.slice(-50).join('\n')
+    console.log(chalk.cyan(`\n─── ${file} (last ${Math.min(lines.length, 50)} lines) ───\n`))
     console.log(tail)
     console.log()
   }
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
-  return showMainMenu()
+
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to logs'] }])
+  return showSystemLogs()
 }
 
 async function showProjects() {

@@ -229,8 +229,11 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
     ? buildClaudePrompt(name, description, errorContext)
     : buildRebuildPrompt(name, description, 'patch', existingFiles, errorContext)
 
-  const { readdirSync, statSync, readFileSync: readF } = await import('fs')
+  const { readdirSync, statSync } = await import('fs')
   const startTime = Date.now()
+
+  log.build(name, `=== ${mode.toUpperCase()} BUILD START ===`, `model=${model}`)
+  log.build(name, 'Prompt:', prompt)
 
   if (onProgress) {
     await onProgress('🧠 Claude Code generando código...')
@@ -247,17 +250,21 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   try {
     const claudeBin = config.claudeCli || 'claude'
     const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
-    await run('su', ['-', 'vpsbot', '-c', claudeCmd], { timeout: 300_000 })
+    const output = await run('su', ['-', 'vpsbot', '-c', claudeCmd], { timeout: 300_000 })
+    log.build(name, 'Claude output:', output || '(no stdout)')
     try {
       recordClaudeCall(Math.round(prompt.length / 4))
     } catch {}
-  } finally {
-    // nothing to clean up
+  } catch (err) {
+    log.buildError(name, 'Claude failed:', err.message)
+    throw err
   }
 
   // Show summary of generated/modified files
+  const elapsed = Math.round((Date.now() - startTime) / 1000)
+  log.build(name, `Code generation completed in ${elapsed}s`)
+
   if (onProgress) {
-    const elapsed = Math.round((Date.now() - startTime) / 1000)
     try {
       const files = readdirSync(dir, { recursive: true })
       const newFiles = []
@@ -280,6 +287,10 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
           } catch {}
         }
       }
+
+      // Log file summary
+      const allFiles = [...newFiles, ...modifiedFiles].map(f => f.replace(/[📄📦🎨🌐🐳📁] /g, '').replace(/`/g, ''))
+      log.build(name, 'Files:', allFiles.join(', '))
 
       let summary = `✅ Código generado en ${elapsed}s\n\n`
       if (newFiles.length) summary += `*Archivos creados:*\n${newFiles.slice(0, 15).join('\n')}\n`
@@ -613,16 +624,20 @@ CMD ["npm", "start"]`
   }
 
   writeComposeFile(dir, name)
+  log.build(name, 'Docker compose up starting')
   await onStatus('🐳 Levantando Docker...')
 
   const onDockerProgress = async (step) => {
+    log.build(name, `Docker: ${step}`)
     await onStatus(`🐳 ${step}`)
   }
 
   try {
     await dockerComposeUp(dir, onDockerProgress)
+    log.build(name, 'Docker compose up OK')
     log.info(`[${name}] docker compose up OK`)
   } catch (err) {
+    log.buildError(name, 'Docker compose up failed', err.message)
     log.error(`[${name}] docker compose up failed`, err.message)
     throw err
   }
@@ -658,12 +673,14 @@ CMD ["npm", "start"]`
 
   const healthy = await pollHealth(healthHost, healthPort, 40_000, onHealthProgress)
   if (!healthy) {
-    const logs = await getContainerLogs(name)
-    log.error(`[${name}] health check failed after 40s`, logs)
-    throw new Error(`App no responde en 40s.\n${logs.slice(-800)}`)
+    const containerLogs = await getContainerLogs(name)
+    log.buildError(name, 'Health check failed after 40s', containerLogs)
+    log.error(`[${name}] health check failed after 40s`, containerLogs)
+    throw new Error(`App no responde en 40s.\n${containerLogs.slice(-800)}`)
   }
 
   const url = projectUrl(name)
+  log.build(name, `=== DEPLOY OK === ${url}`)
   log.info(`[${name}] deploy OK → ${url}`)
   await onStatus(`✅ App en ejecución\n🔗 ${url}`)
 }

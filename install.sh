@@ -15,7 +15,9 @@ NC='\033[0m'
 chmod +x "${BASH_SOURCE[0]}" 2>/dev/null || true
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="${INSTALL_DIR}/install.log"
+LOGS_DIR="${INSTALL_DIR}/logs"
+mkdir -p "$LOGS_DIR"
+LOG_FILE="${LOGS_DIR}/install.log"
 
 # Init log file
 echo "=== VPS-CODE-BOT Install $(date -Iseconds) ===" > "$LOG_FILE"
