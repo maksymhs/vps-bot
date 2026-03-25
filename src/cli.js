@@ -854,22 +854,51 @@ async function configureDomain() {
   }])
 
   if (domain) {
-    updateEnvVar('DOMAIN', domain)
-    updateEnvVar('IP_ADDRESS', '', true)
-
-    // Detect server IP for DNS instructions
+    // Detect server IP
     let serverIp = config.ipAddress || 'localhost'
     try {
-      serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo 'YOUR_SERVER_IP'", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+      serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
     } catch {}
 
-    console.log(chalk.cyan(`\n━━━ DNS Configuration Required ━━━\n`))
-    console.log(chalk.yellow(`  Add these DNS records pointing to ${chalk.bold(serverIp)}:\n`))
-    console.log(`    ${chalk.bold('A')}  ${domain}        → ${serverIp}`)
-    console.log(`    ${chalk.bold('A')}  *.${domain}      → ${serverIp}`)
-    console.log()
-    console.log(chalk.gray(`  This covers code.${domain} and all {app}.${domain} subdomains.`))
-    console.log(chalk.gray(`  SSL certificates are auto-managed by Caddy (Let's Encrypt).\n`))
+    // Verify DNS before applying
+    console.log(chalk.cyan('\n━━━ Verifying DNS ━━━\n'))
+    const dns = await import('dns')
+    const { promisify } = await import('util')
+    const resolve4 = promisify(dns.resolve4)
+
+    let dnsOk = true
+    const checks = [domain, `code.${domain}`]
+    for (const host of checks) {
+      try {
+        console.log(chalk.gray(`  Resolving ${host}...`))
+        const ips = await resolve4(host)
+        if (ips.includes(serverIp)) {
+          console.log(chalk.green(`  ✓ ${host} → ${ips.join(', ')}`))
+        } else {
+          console.log(chalk.red(`  ✗ ${host} → ${ips.join(', ')} (expected ${serverIp})`))
+          dnsOk = false
+        }
+      } catch (err) {
+        console.log(chalk.red(`  ✗ ${host} → DNS resolution failed (${err.code || err.message})`))
+        dnsOk = false
+      }
+    }
+
+    if (!dnsOk) {
+      console.log(chalk.red(`\n✗ DNS does not point to this server (${serverIp}).\n`))
+      console.log(chalk.yellow(`  Add these DNS records first:\n`))
+      console.log(`    ${chalk.bold('A')}  ${domain}        → ${serverIp}`)
+      console.log(`    ${chalk.bold('A')}  *.${domain}      → ${serverIp}`)
+      console.log()
+      console.log(chalk.gray(`  DNS propagation can take a few minutes. Try again after updating.\n`))
+      await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
+      return showConfig()
+    }
+
+    console.log(chalk.green(`\n✓ DNS verified — ${domain} points to ${serverIp}\n`))
+
+    updateEnvVar('DOMAIN', domain)
+    updateEnvVar('IP_ADDRESS', '', true)
 
     console.log(chalk.yellow(`Setting up Caddy SSL for *.${domain}...\n`))
 
