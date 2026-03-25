@@ -86,6 +86,7 @@ async function showMainMenu(clear = true) {
 }
 
 async function showSystemLogs() {
+  console.clear()
   const { readdirSync } = await import('fs')
   const logsDir = log.dir
 
@@ -129,6 +130,7 @@ async function showSystemLogs() {
 }
 
 async function showProjects() {
+  console.clear()
   const projects = store.getAll()
   const names = Object.keys(projects)
 
@@ -154,6 +156,7 @@ async function showProjects() {
 }
 
 async function showProjectMenu(name) {
+  console.clear()
   const project = store.get(name)
   if (!project) {
     console.log(chalk.red(`\nProject "${name}" not found.\n`))
@@ -346,6 +349,7 @@ async function rebuildProject(name) {
 }
 
 async function showNewProject() {
+  console.clear()
   // Step 1: Check Claude Code is installed
   let claudeInstalled = false
   try {
@@ -490,6 +494,7 @@ async function showNewProject() {
 }
 
 async function showStatus() {
+  console.clear()
   try {
     const [cpu, mem, disk] = await Promise.all([si.currentLoad(), si.mem(), si.fsSize()])
     const gb = (b) => (b / 1024 ** 3).toFixed(1)
@@ -509,6 +514,7 @@ async function showStatus() {
 }
 
 async function showContainers() {
+  console.clear()
   try {
     const containers = await getDocker().listContainers({ all: true })
 
@@ -534,6 +540,7 @@ async function showContainers() {
 }
 
 async function showCodeServer() {
+  console.clear()
   try {
     console.log(chalk.cyan('\nStarting Code-Server...\n'))
     const result = await ensureCodeServer()
@@ -554,6 +561,7 @@ async function showCodeServer() {
 }
 
 async function showClaudeUsage() {
+  console.clear()
   const text = getUsageText()
     .replace(/\*/g, '')
     .replace(/`/g, '')
@@ -581,6 +589,7 @@ async function openProjectCodeServer(name) {
 }
 
 async function showGitMenu(name) {
+  console.clear()
   const { action } = await inquirer.prompt([{
     type: 'list',
     name: 'action',
@@ -713,6 +722,7 @@ async function deleteProject(name) {
 }
 
 async function showConfig() {
+  console.clear()
   const net = config.domain
     ? chalk.green(`${config.domain} (SSL)`)
     : chalk.green(`${config.ipAddress}:${config.port}`)
@@ -778,6 +788,7 @@ async function showConfig() {
 }
 
 async function configureClaude() {
+  console.clear()
   // Check if installed
   let installed = false
   try {
@@ -846,6 +857,7 @@ async function configureClaude() {
 }
 
 async function configureDomain() {
+  console.clear()
   const { domain } = await inquirer.prompt([{
     type: 'input',
     name: 'domain',
@@ -970,6 +982,7 @@ async function configureDomain() {
 }
 
 async function configureTelegram() {
+  console.clear()
   console.log(chalk.cyan('\n━━━ Telegram Bot Setup ━━━\n'))
   console.log(chalk.gray('  1. Open Telegram and talk to @BotFather'))
   console.log(chalk.gray('  2. Send /newbot and follow the steps'))
@@ -1085,6 +1098,7 @@ function stopBot() {
 }
 
 async function manageTelegramBot() {
+  console.clear()
   let running = false
   try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); running = true } catch {}
 
@@ -1116,6 +1130,7 @@ async function manageTelegramBot() {
 }
 
 async function configurePassword() {
+  console.clear()
   const { password } = await inquirer.prompt([{
     type: 'input',
     name: 'password',
