@@ -1,9 +1,11 @@
 import inquirer from 'inquirer'
 import chalk from 'chalk'
 import { execSync, spawn } from 'child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { config } from '../lib/config.js'
+import { store } from '../lib/store.js'
+import { writeComposeFile, projectUrl } from '../commands/projects.js'
 import { updateEnvVar } from './ui.js'
 
 // ── Configuration dashboard ──────────────────────────────────────────────────
@@ -140,6 +142,45 @@ async function configureClaude(nav) {
   return showConfig(nav)
 }
 
+// ── Project migration (domain ↔ IP) ─────────────────────────────────────────
+
+async function migrateProjects(mode) {
+  const projects = store.getAll()
+  const names = Object.keys(projects)
+  if (!names.length) return
+
+  console.log(chalk.yellow(`\n  Migrating ${names.length} project(s) to ${mode} mode...\n`))
+
+  for (const name of names) {
+    const dir = join(config.projectsDir, name)
+    if (!existsSync(dir)) {
+      console.log(chalk.gray(`  ⊘ ${name} — directory missing, skipping`))
+      continue
+    }
+
+    try {
+      // 1. Stop current container
+      console.log(chalk.gray(`  [${name}] stopping...`))
+      execSync('docker compose down 2>/dev/null || true', { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'] })
+
+      // 2. Rewrite docker-compose.yml with correct network config
+      writeComposeFile(dir, name)
+
+      // 3. Update store URL
+      const url = projectUrl(name)
+      store.set(name, { url })
+
+      // 4. Rebuild and start container with new config
+      console.log(chalk.gray(`  [${name}] starting with ${mode} config...`))
+      execSync('docker compose up --build -d', { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], timeout: 120_000 })
+
+      console.log(chalk.green(`  ✓ ${name} → ${url}`))
+    } catch (err) {
+      console.log(chalk.red(`  ✗ ${name} — ${err.message?.slice(0, 120)}`))
+    }
+  }
+}
+
 // ── Domain setup ─────────────────────────────────────────────────────────────
 
 async function configureDomain(nav) {
@@ -255,6 +296,9 @@ async function configureDomain(nav) {
       console.log(chalk.green(`\n✓ Caddy running with auto-SSL`))
       console.log(chalk.green(`✓ https://code.${domain} → Code-Server`))
       console.log(chalk.green(`✓ https://{app}.${domain} → Project apps`))
+
+      // Migrate existing projects to domain mode
+      await migrateProjects('domain')
     }
   } else {
     updateEnvVar('DOMAIN', '', true)
@@ -275,6 +319,9 @@ async function configureDomain(nav) {
 
     console.log(chalk.green(`\n✓ Switched to IP mode`))
     console.log(chalk.green(`✓ Code-Server: http://${ip}:${csPort}\n`))
+
+    // Migrate existing projects to IP mode
+    await migrateProjects('ip')
   }
 
   console.log()

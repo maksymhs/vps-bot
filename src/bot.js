@@ -3,7 +3,7 @@ import { Telegraf } from 'telegraf'
 import { execFile } from 'child_process'
 import { statusCommand } from './commands/status.js'
 import { psCommand, logsCommand, restartCommand, stopCommand, startCommand } from './commands/docker.js'
-import { newCommand, rebuildCommand, listCommand, urlCommand, deleteProjectCommand, deployNew, deployRebuild } from './commands/projects.js'
+import { newCommand, rebuildCommand, listCommand, urlCommand, deleteProjectCommand, deployNew, deployRebuild, projectUrl } from './commands/projects.js'
 import { showMain, showList, showProject, showDeleteConfirm, startNewFlow, pendingNew, startRebuildFlow, startRebuildPatch, startRebuildFull, pendingRebuild, showModelSelect, showGitMenu } from './commands/menu.js'
 import { store } from './lib/store.js'
 import { getUsageText } from './lib/usage.js'
@@ -540,7 +540,7 @@ bot.action(/^nbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
   deployNew(ctx, name, state.description, model)
     .then(ok => {
       if (ok) {
-        const url = `https://${name}.${process.env.DOMAIN ?? 'maksym.site'}`
+        const url = projectUrl(name)
         ctx.reply(`✅ *${name}* is ready!\n\n🔗 ${url}`, { parse_mode: 'Markdown' }).catch(() => {})
         sendProjectMenu(ctx, name).catch(() => {})
       }

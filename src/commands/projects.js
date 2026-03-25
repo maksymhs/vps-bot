@@ -16,7 +16,7 @@ function projectDir(name) {
   return join(config.projectsDir, name)
 }
 
-function projectUrl(name) {
+export function projectUrl(name) {
   if (config.domain) {
     return `https://${name}.${config.domain}`
   }
@@ -104,7 +104,7 @@ function getNextPort() {
 }
 
 
-function writeComposeFile(dir, name) {
+export function writeComposeFile(dir, name) {
   let compose
   if (config.domain) {
     compose = `services:
