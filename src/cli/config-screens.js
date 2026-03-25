@@ -370,52 +370,7 @@ async function configureTelegram(nav) {
   }])
 
   if (method === 'auto') {
-    console.log(chalk.yellow('\nFetching latest messages from bot...\n'))
-    let detected = false
-    try {
-      const result = execSync(`curl -sf "https://api.telegram.org/bot${token}/getUpdates" 2>/dev/null`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString()
-      const data = JSON.parse(result)
-      if (data.ok && data.result && data.result.length > 0) {
-        const lastMsg = data.result[data.result.length - 1]
-        const chatId = lastMsg.message?.chat?.id || lastMsg.my_chat_member?.chat?.id
-        if (chatId) {
-          const chatName = lastMsg.message?.chat?.first_name || lastMsg.my_chat_member?.chat?.first_name || ''
-          console.log(chalk.green(`  ✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
-          updateEnvVar('CHAT_ID', chatId.toString())
-          console.log(chalk.green('  ✓ Telegram configured!\n'))
-          detected = true
-        }
-      }
-      if (!detected) {
-        console.log(chalk.yellow('  No messages found. Send a message to your bot first.\n'))
-      }
-    } catch {
-      console.log(chalk.red('  Could not reach Telegram API. Check your token.\n'))
-    }
-
-    const { retry } = await inquirer.prompt([{
-      type: 'list',
-      name: 'retry',
-      message: detected ? 'Next:' : 'What to do?',
-      loop: false,
-      choices: [
-        ...(detected
-          ? [{ name: 'Start bot now', value: 'start' }]
-          : [{ name: 'Retry detection', value: 'retry' }]
-        ),
-        { name: 'Back to config', value: 'back' },
-      ],
-    }])
-
-    if (retry === 'retry') {
-      // Re-enter auto-detect: go back to configureTelegram but skip token prompt
-      // Simpler: just re-run the auto-detect part
-      return configureTelegram(nav)
-    }
-    if (retry === 'start') {
-      startBotBackground()
-    }
-    return showConfig(nav)
+    return autoDetectChatId(token, nav)
   }
 
   if (method === 'manual') {
@@ -432,6 +387,53 @@ async function configureTelegram(nav) {
     return offerStartBot(nav)
   }
 
+  return showConfig(nav)
+}
+
+async function autoDetectChatId(token, nav) {
+  console.clear()
+  console.log(chalk.cyan('\n  Auto-detect Chat ID\n'))
+  console.log(chalk.gray('  Make sure you have sent a message to your bot in Telegram.\n'))
+  console.log(chalk.yellow('  Fetching latest messages...\n'))
+
+  let detected = false
+  try {
+    const result = execSync(`curl -sf "https://api.telegram.org/bot${token}/getUpdates" 2>/dev/null`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString()
+    const data = JSON.parse(result)
+    if (data.ok && data.result && data.result.length > 0) {
+      const lastMsg = data.result[data.result.length - 1]
+      const chatId = lastMsg.message?.chat?.id || lastMsg.my_chat_member?.chat?.id
+      if (chatId) {
+        const chatName = lastMsg.message?.chat?.first_name || lastMsg.my_chat_member?.chat?.first_name || ''
+        console.log(chalk.green(`  ✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
+        updateEnvVar('CHAT_ID', chatId.toString())
+        console.log(chalk.green('  ✓ Telegram configured!\n'))
+        detected = true
+      }
+    }
+    if (!detected) {
+      console.log(chalk.yellow('  ✗ No messages found. Send a message to your bot first.\n'))
+    }
+  } catch {
+    console.log(chalk.red('  ✗ Could not reach Telegram API. Check your token.\n'))
+  }
+
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: detected ? 'Next:' : 'What to do?',
+    loop: false,
+    choices: [
+      ...(detected
+        ? [{ name: 'Start bot now', value: 'start' }]
+        : [{ name: 'Retry detection', value: 'retry' }]
+      ),
+      { name: 'Back to config', value: 'back' },
+    ],
+  }])
+
+  if (action === 'retry') return autoDetectChatId(token, nav)
+  if (action === 'start') startBotBackground()
   return showConfig(nav)
 }
 
