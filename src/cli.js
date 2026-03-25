@@ -22,21 +22,83 @@ import { gitPush, gitPull, gitStatus, initGitRepo, gitCommit } from './commands/
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envFile = join(dirname(__dirname), '.env')
 
+// CLI spinner for build progress
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+let spinnerInterval = null
+let spinnerFrame = 0
+let spinnerText = ''
+
+function startSpinner(text) {
+  stopSpinner()
+  spinnerText = text
+  spinnerFrame = 0
+  process.stdout.write(`  ${chalk.cyan(SPINNER[0])} ${chalk.gray(text)}`)
+  spinnerInterval = setInterval(() => {
+    spinnerFrame = (spinnerFrame + 1) % SPINNER.length
+    process.stdout.write(`\r  ${chalk.cyan(SPINNER[spinnerFrame])} ${chalk.gray(spinnerText)}                    `)
+  }, 80)
+}
+
+function updateSpinner(text) {
+  spinnerText = text
+  if (spinnerInterval) {
+    process.stdout.write(`\r  ${chalk.cyan(SPINNER[spinnerFrame])} ${chalk.gray(text)}                    `)
+  }
+}
+
+function stopSpinner(finalText, success = true) {
+  if (spinnerInterval) {
+    clearInterval(spinnerInterval)
+    spinnerInterval = null
+  }
+  if (finalText) {
+    const icon = success ? chalk.green('✓') : chalk.red('✗')
+    process.stdout.write(`\r  ${icon} ${finalText}                              \n`)
+  }
+}
+
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*/g, '').replace(/\*/g, '')
+    .replace(/`{3}[\s\S]*?`{3}/g, (m) => m.replace(/`/g, ''))
+    .replace(/`/g, '').replace(/_/g, '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+}
+
 // CLI context that mimics Telegram bot context for reusing deploy functions
 const cliCtx = {
-  reply: (text, opts) => {
-    const plain = text
-      .replace(/\*\*/g, '')
-      .replace(/\*/g, '')
-      .replace(/`{3}[\s\S]*?`{3}/g, (m) => m.replace(/`/g, ''))
-      .replace(/`/g, '')
-      .replace(/_/g, '')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
-    console.log(plain)
-    return Promise.resolve({ message_id: 0 })
+  reply: (text) => {
+    const plain = stripMarkdown(text)
+    // Final success message
+    if (plain.startsWith('✅')) {
+      stopSpinner(plain.replace('✅ ', ''), true)
+    } else if (plain.startsWith('❌')) {
+      stopSpinner(plain.replace('❌ ', ''), false)
+    } else {
+      // Extract just the phase text (remove project name header, timestamps)
+      const phase = plain.replace(/^⚙️\s*\S+\s*/, '').replace(/\d+[ms]+\s*$/, '').trim()
+      if (spinnerInterval) {
+        updateSpinner(phase)
+      } else {
+        startSpinner(phase)
+      }
+    }
+    return Promise.resolve({ message_id: 1 })
   },
   chat: { id: 'cli' },
-  telegram: { editMessageText: async () => {} },
+  telegram: {
+    editMessageText: async (_chatId, _msgId, _inlineId, text) => {
+      const plain = stripMarkdown(text)
+      if (plain.startsWith('✅')) {
+        stopSpinner(plain.replace('✅ ', ''), true)
+      } else if (plain.startsWith('❌')) {
+        stopSpinner(plain.replace('❌ ', ''), false)
+      } else {
+        const phase = plain.replace(/^⚙️\s*\S+\s*/, '').replace(/\d+[ms]+\s*$/, '').trim()
+        updateSpinner(phase)
+      }
+    },
+  },
 }
 
 async function showMainMenu(clear = true) {
@@ -331,18 +393,17 @@ async function rebuildProject(name) {
     ? `${project.description}\n\nCambios solicitados: ${desc}`
     : desc
 
-  console.log(chalk.cyan(`\nRebuilding ${name}...\n`))
+  console.log(chalk.cyan(`\n  Rebuilding ${chalk.bold(name)}\n`))
 
   try {
     const { deployRebuild } = await import('./commands/projects.js')
     const ok = await deployRebuild(cliCtx, name, description, model, mode)
-    if (ok) {
-      console.log(chalk.green(`\n✓ ${name} rebuilt successfully!\n`))
-    } else {
-      console.log(chalk.red(`\n✗ Rebuild failed.\n`))
+    stopSpinner()
+    if (!ok) {
+      console.log(chalk.red(`\n  ✗ Rebuild failed.\n`))
     }
   } catch (err) {
-    console.error(chalk.red(`\nRebuild failed: ${err.message}\n`))
+    stopSpinner(`Rebuild failed: ${err.message}`, false)
   }
 
   await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Continue'] }])
@@ -469,24 +530,20 @@ async function showNewProject() {
 
   if (action === 'back') return showMainMenu()
 
-  console.log(chalk.cyan(`\nCreating project: ${name}...\n`))
+  console.log(chalk.cyan(`\n  Creating ${chalk.bold(name)}\n`))
 
   try {
     const { deployNew } = await import('./commands/projects.js')
     buildingSet.add(name)
     const ok = await deployNew(cliCtx, name, description, model)
     buildingSet.delete(name)
-    if (ok) {
-      const p = store.get(name)
-      const url = p?.url || (p?.port ? `http://${config.ipAddress || 'localhost'}:${p.port}` : '')
-      console.log(chalk.green(`\n✓ ${name} created successfully!`))
-      if (url) console.log(chalk.gray(`URL: ${url}\n`))
-    } else {
-      console.log(chalk.red(`\n✗ Project creation failed.\n`))
+    stopSpinner()
+    if (!ok) {
+      console.log(chalk.red(`\n  ✗ Project creation failed.\n`))
     }
   } catch (err) {
     buildingSet.delete(name)
-    console.error(chalk.red(`\nCreation failed: ${err.message}\n`))
+    stopSpinner(`Creation failed: ${err.message}`, false)
   }
 
   await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])

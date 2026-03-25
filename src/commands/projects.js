@@ -236,7 +236,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   log.build(name, 'Prompt:', prompt)
 
   if (onProgress) {
-    await onProgress('🧠 Claude Code generando código...')
+    await onProgress('🧠 Generando código...')
   }
 
   // Track files created during build
@@ -264,42 +264,24 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   const elapsed = Math.round((Date.now() - startTime) / 1000)
   log.build(name, `Code generation completed in ${elapsed}s`)
 
-  if (onProgress) {
-    try {
-      const files = readdirSync(dir, { recursive: true })
-      const newFiles = []
-      const modifiedFiles = []
-
-      for (const file of files) {
-        if (typeof file === 'string' && !file.includes('node_modules') && !file.includes('.git')) {
-          const fullPath = join(dir, file)
-          try {
-            const stat = statSync(fullPath)
-            if (!stat.isFile()) continue
-            const icon = file.endsWith('.js') ? '📄' : file.endsWith('.json') ? '📦' : file.endsWith('.css') ? '🎨' : file.endsWith('.html') ? '🌐' : file === 'Dockerfile' ? '🐳' : '📁'
+  // Log file summary to build log
+  try {
+    const files = readdirSync(dir, { recursive: true })
+    const fileList = []
+    for (const file of files) {
+      if (typeof file === 'string' && !file.includes('node_modules') && !file.includes('.git')) {
+        const fullPath = join(dir, file)
+        try {
+          const stat = statSync(fullPath)
+          if (stat.isFile()) {
             const sizeStr = stat.size > 1024 ? `${(stat.size/1024).toFixed(1)}KB` : `${stat.size}B`
-            const entry = `${icon} \`${file}\` (${sizeStr})`
-            if (initialFiles.has(file)) {
-              modifiedFiles.push(entry)
-            } else {
-              newFiles.push(entry)
-            }
-          } catch {}
-        }
+            fileList.push(`${file} (${sizeStr})`)
+          }
+        } catch {}
       }
-
-      // Log file summary
-      const allFiles = [...newFiles, ...modifiedFiles].map(f => f.replace(/[📄📦🎨🌐🐳📁] /g, '').replace(/`/g, ''))
-      log.build(name, 'Files:', allFiles.join(', '))
-
-      let summary = `✅ Código generado en ${elapsed}s\n\n`
-      if (newFiles.length) summary += `*Archivos creados:*\n${newFiles.slice(0, 15).join('\n')}\n`
-      if (modifiedFiles.length && mode !== 'new') summary += `\n*Archivos modificados:*\n${modifiedFiles.slice(0, 10).join('\n')}`
-      await onProgress(summary.trim())
-    } catch {
-      await onProgress(`✅ Código generado en ${elapsed}s`)
     }
-  }
+    log.build(name, 'Files:', fileList.join(', '))
+  } catch {}
   fixUnicodeChars(dir)
 }
 
@@ -593,11 +575,9 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
   log.info(`[${name}] build start`, `model=${model} dir=${dir} mode=${mode}`)
 
   if (isOpenRouterModel(model)) {
-    await onStatus(`${modelTag} Usando OpenRouter...`)
+    await onStatus('🧠 Generando código...')
     await runOpenRouter(dir, name, description, errorContext, model.replace('openrouter/', ''))
   } else {
-    const modeLabel = mode === 'new' ? 'Generando proyecto' : mode === 'full' ? 'Regenerando proyecto' : 'Aplicando cambios'
-    await onStatus(`${modelTag} ${modeLabel}...`)
     try {
       await runClaude(dir, name, description, onStatus, errorContext, model, mode)
       log.info(`[${name}] code generated`)
@@ -625,11 +605,10 @@ CMD ["npm", "start"]`
 
   writeComposeFile(dir, name)
   log.build(name, 'Docker compose up starting')
-  await onStatus('🐳 Levantando Docker...')
+  await onStatus('🐳 Construyendo imagen...')
 
   const onDockerProgress = async (step) => {
     log.build(name, `Docker: ${step}`)
-    await onStatus(`🐳 ${step}`)
   }
 
   try {
@@ -642,7 +621,7 @@ CMD ["npm", "start"]`
     throw err
   }
 
-  await onStatus('🔍 Verificando que arranca...')
+  await onStatus('🔍 Verificando...')
 
   // In IP mode, check via localhost:mappedPort; in domain mode, use container IP:3000
   const project = store.get(name)
@@ -665,10 +644,9 @@ CMD ["npm", "start"]`
   }
 
   log.info(`[${name}] polling health at ${healthHost}:${healthPort}`)
-  await onStatus(`🔄 Esperando respuesta HTTP en ${healthHost}:${healthPort}...`)
 
   const onHealthProgress = async (msg) => {
-    await onStatus(`🔍 ${msg}`)
+    log.build(name, `Health: ${msg}`)
   }
 
   const healthy = await pollHealth(healthHost, healthPort, 40_000, onHealthProgress)
@@ -682,7 +660,7 @@ CMD ["npm", "start"]`
   const url = projectUrl(name)
   log.build(name, `=== DEPLOY OK === ${url}`)
   log.info(`[${name}] deploy OK → ${url}`)
-  await onStatus(`✅ App en ejecución\n🔗 ${url}`)
+  await onStatus(`✅ Listo → ${url}`)
 }
 
 async function deployWithRetry(ctx, dir, name, description, action, model = 'claude-sonnet-4-6', mode = null) {
@@ -696,17 +674,14 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
     const onStatus = async (text) => {
       const elapsed = Math.round((Date.now() - buildStart) / 1000)
       const timeStr = elapsed > 60 ? `${Math.floor(elapsed/60)}m ${elapsed%60}s` : `${elapsed}s`
-      const prefix = attempt > 1 ? `🔄 Reintento ${attempt}/${MAX_RETRIES} · ` : ''
-      const fullText = `${prefix}⏱ ${timeStr}\n\n${text}`
+      const retry = attempt > 1 ? ` · Reintento ${attempt}/${MAX_RETRIES}` : ''
+      const fullText = `⚙️ *${name}*${retry}\n${text} _${timeStr}_`
 
-      // Try to edit existing message, create new if needed
       if (statusMsgId) {
         try {
           await ctx.telegram.editMessageText(ctx.chat.id, statusMsgId, null, fullText, { parse_mode: 'Markdown' })
           return
-        } catch {
-          // edit failed (message too old or content same), send new
-        }
+        } catch {}
       }
       const msg = await ctx.reply(fullText, { parse_mode: 'Markdown' })
       statusMsgId = msg.message_id
@@ -715,7 +690,6 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
     try {
       if (attempt > 1) {
         statusMsgId = null
-        await onStatus(`🔄 *Reintento ${attempt}/${MAX_RETRIES}*\nCorrigiendo errores del intento anterior...`)
       }
 
       await buildAndVerify(dir, name, description, onStatus,
@@ -727,14 +701,14 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
       log.error(`[${name}] attempt ${attempt} failed`, err.message)
       if (attempt < MAX_RETRIES) {
         statusMsgId = null
-        await ctx.reply(`⚠️ Intento ${attempt} fallido, reintentando...\n\`${err.message.slice(0, 200)}\``, { parse_mode: 'Markdown' })
+        await ctx.reply(`⚠️ Intento ${attempt} fallido, reintentando...`, { parse_mode: 'Markdown' })
         await new Promise(r => setTimeout(r, 2000))
       }
     }
   }
 
   log.error(`[${name}] failed after ${MAX_RETRIES} attempts`, lastError?.message)
-  await ctx.reply(`❌ Falló tras ${MAX_RETRIES} intentos:\n\`${lastError?.message?.slice(0, 400)}\``, { parse_mode: 'Markdown' })
+  await ctx.reply(`❌ *${name}* — Falló tras ${MAX_RETRIES} intentos`, { parse_mode: 'Markdown' })
   return false
 }
 
@@ -753,27 +727,13 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
       log.error(`[${name}] git init failed`, err.message)
     }
 
-    // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
-    const finalMsg = `✅ *Proyecto creado exitosamente*
-
-📦 *${name}*
-_${description}_
-
-🔗 URL: \`${url}\`
-📁 Directorio: \`${projectDir(name)}\`
-🤖 Modelo: ${model.includes('opus') ? '🧠 Opus' : model.includes('haiku') ? '⚡ Haiku' : '🚀 Sonnet'}
-
-🎉 ¡Listo para usar!`
-
-    await ctx.reply(finalMsg, {
+    await ctx.reply(`✅ *${name}* creado\n🔗 ${url}`, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('▶️ Start', `go:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
-        [Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback(' URL', `url:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
       ]),
     })
   }
@@ -812,26 +772,13 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
       log.error(`[${name}] git commit failed`, err.message)
     }
 
-    // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
-    const finalMsg = `✅ *Proyecto reconstruido exitosamente*
-
-📦 *${name}*
-_${description}_
-
-🔗 URL: \`${url}\`
-🤖 Modelo: ${model.includes('opus') ? '🧠 Opus' : model.includes('haiku') ? '⚡ Haiku' : '🚀 Sonnet'}
-
-♻️ Cambios aplicados y verificados`
-
-    await ctx.reply(finalMsg, {
+    await ctx.reply(`✅ *${name}* actualizado\n🔗 ${url}`, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('🛑 Stop', `st:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
-        [Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('🔗 URL', `url:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
       ]),
     })
   }
