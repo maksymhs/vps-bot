@@ -867,7 +867,7 @@ async function configureDomain() {
     const resolve4 = promisify(dns.resolve4)
 
     let dnsOk = true
-    const checks = [domain, `code.${domain}`]
+    const checks = [`code.${domain}`]
     for (const host of checks) {
       try {
         console.log(chalk.gray(`  Resolving ${host}...`))
@@ -886,8 +886,7 @@ async function configureDomain() {
 
     if (!dnsOk) {
       console.log(chalk.red(`\n✗ DNS does not point to this server (${serverIp}).\n`))
-      console.log(chalk.yellow(`  Add these DNS records first:\n`))
-      console.log(`    ${chalk.bold('A')}  ${domain}        → ${serverIp}`)
+      console.log(chalk.yellow(`  Add this DNS record first:\n`))
       console.log(`    ${chalk.bold('A')}  *.${domain}      → ${serverIp}`)
       console.log()
       console.log(chalk.gray(`  DNS propagation can take a few minutes. Try again after updating.\n`))
