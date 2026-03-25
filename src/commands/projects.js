@@ -294,8 +294,15 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
 
   try {
     const claudeBin = config.claudeCli || 'claude'
-    const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
-    const output = await run('su', ['-', 'vpsbot', '-c', claudeCmd], { timeout: 300_000 })
+    // Write prompt to a temp file to avoid bash escaping issues with special chars
+    // (parentheses, arrows, HTML tags, backticks etc. in template INSTRUCTIONS)
+    const tmpPrompt = join(dir, '.claude-prompt.txt')
+    writeFileSync(tmpPrompt, prompt)
+    try { execSync(`chown vpsbot:vpsbot ${JSON.stringify(tmpPrompt)}`) } catch {}
+    // Use node -e to read file and spawn claude via execFileSync (no shell parsing of prompt)
+    const nodeCmd = `node -e "const{execFileSync:x}=require('child_process'),p=require('fs').readFileSync('.claude-prompt.txt','utf8');try{const o=x(${JSON.stringify(claudeBin)},['-p',p,'--dangerously-skip-permissions','--model',${JSON.stringify(model)}],{timeout:280000,maxBuffer:50*1024*1024});process.stdout.write(o)}catch(e){process.stderr.write(e.stderr?e.stderr.toString():e.message);process.exit(1)}"`
+    const output = await run('su', ['-', 'vpsbot', '-c', `cd ${JSON.stringify(dir)} && ${nodeCmd}`], { timeout: 300_000 })
+    try { rmSync(tmpPrompt) } catch {}
     log.build(name, 'Claude output:', output || '(no stdout)')
     try {
       recordClaudeCall(Math.round(prompt.length / 4))
@@ -336,7 +343,12 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
   let lastUpdate = Date.now()
 
   const claudeBin = config.claudeCli || 'claude'
-  const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
+  // Write prompt to temp file to avoid bash escaping issues
+  const tmpPrompt = join(dir, '.claude-prompt.txt')
+  writeFileSync(tmpPrompt, prompt)
+  try { execSync(`chown vpsbot:vpsbot ${JSON.stringify(tmpPrompt)}`) } catch {}
+  const nodeCmd = `node -e "const{execFileSync:x}=require('child_process'),p=require('fs').readFileSync('.claude-prompt.txt','utf8');try{const o=x(${JSON.stringify(claudeBin)},['-p',p,'--dangerously-skip-permissions','--model',${JSON.stringify(model)}],{timeout:280000,maxBuffer:50*1024*1024});process.stdout.write(o)}catch(e){process.stderr.write(e.stderr?e.stderr.toString():e.message);process.exit(1)}"`
+  const claudeCmd = `cd ${JSON.stringify(dir)} && ${nodeCmd}`
   await runWithStreaming('su', ['-', 'vpsbot', '-c', claudeCmd], {
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
@@ -350,6 +362,7 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
     }
   })
 
+  try { rmSync(tmpPrompt) } catch {}
   fixUnicodeChars(dir)
 }
 
