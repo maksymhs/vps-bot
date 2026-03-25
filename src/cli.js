@@ -150,6 +150,7 @@ async function showMainMenu(clear = true) {
 
 async function showSystemLogs() {
   console.clear()
+  console.log(chalk.cyan('\n  System Logs\n'))
   const { readdirSync } = await import('fs')
   const logsDir = log.dir
 
@@ -159,7 +160,7 @@ async function showSystemLogs() {
   } catch {}
 
   if (!logFiles.length) {
-    console.log(chalk.yellow('\nNo logs yet.\n'))
+    console.log(chalk.yellow('  No logs yet.\n'))
     await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
     return showConfig()
   }
@@ -178,17 +179,19 @@ async function showSystemLogs() {
 
   if (file === 'back') return showConfig()
 
+  // Show log file in subsection
+  console.clear()
+  console.log(chalk.cyan(`\n  ${file}\n`))
   const filePath = join(logsDir, file)
   if (existsSync(filePath)) {
     const content = readFileSync(filePath, 'utf8')
     const lines = content.trim().split('\n')
     const tail = lines.slice(-50).join('\n')
-    console.log(chalk.cyan(`\n─── ${file} (last ${Math.min(lines.length, 50)} lines) ───\n`))
     console.log(tail)
-    console.log()
+    console.log(chalk.gray(`\n  (last ${Math.min(lines.length, 50)} of ${lines.length} lines)\n`))
   }
 
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to logs'] }])
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showSystemLogs()
 }
 
@@ -275,8 +278,11 @@ async function showProjectMenu(name) {
 
     if (action === 'back') return showProjects()
     if (action === 'url') {
+      console.clear()
       const url = project.url || (project.port ? `http://${config.ipAddress || 'localhost'}:${project.port}` : '(no URL)')
-      console.log(chalk.gray(`\n${url}\n`))
+      console.log(chalk.cyan(`\n  URL — ${name}\n`))
+      console.log(`  ${url}\n`)
+      await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
       return showProjectMenu(name)
     }
     if (action === 'logs') {
@@ -321,23 +327,25 @@ async function showProjectMenu(name) {
 }
 
 async function showLogs(name) {
+  console.clear()
+  console.log(chalk.cyan(`\n  Logs — ${name}\n`))
   try {
     const containers = await getDocker().listContainers({
       all: true,
       filters: JSON.stringify({ name: [`${name}-app`] }),
     })
     if (!containers.length) {
-      console.log(chalk.yellow(`\nNo container found for "${name}".\n`))
-      return
+      console.log(chalk.yellow('  No container found.\n'))
+    } else {
+      const stream = await getDocker().getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
+      const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).trim() || '(no logs)'
+      console.log(text)
+      console.log()
     }
-    const stream = await getDocker().getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
-    const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).trim() || '(no logs)'
-    console.log(chalk.cyan(`\nLogs for ${name}:\n`))
-    console.log(text)
-    console.log()
   } catch (err) {
-    console.error(chalk.red(`\nError fetching logs: ${err.message}\n`))
+    console.log(chalk.red(`  Error: ${err.message}\n`))
   }
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
 }
 
 async function stopContainer(name) {
@@ -574,33 +582,33 @@ async function showNewProject() {
 
 async function showStatus() {
   console.clear()
+  console.log(chalk.cyan('\n  Server Status\n'))
   try {
     const [cpu, mem, disk] = await Promise.all([si.currentLoad(), si.mem(), si.fsSize()])
     const gb = (b) => (b / 1024 ** 3).toFixed(1)
     const pct = (n) => Math.round(n)
     const d = disk.find((d) => d.mount === '/') || disk[0]
 
-    console.log(chalk.cyan('\nServer Status:\n'))
     console.log(`  CPU Usage:   ${pct(cpu.currentLoad)}%`)
     console.log(`  Memory:      ${gb(mem.used)}GB / ${gb(mem.total)}GB (${pct((mem.used / mem.total) * 100)}%)`)
     console.log(`  Disk Space:  ${gb(d.used)}GB / ${gb(d.size)}GB (${pct(d.use)}%)\n`)
   } catch (err) {
-    console.log(chalk.red(`\nError: ${err.message}\n`))
+    console.log(chalk.red(`  Error: ${err.message}\n`))
   }
 
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showMainMenu()
 }
 
 async function showContainers() {
   console.clear()
+  console.log(chalk.cyan('\n  Docker Containers\n'))
   try {
     const containers = await getDocker().listContainers({ all: true })
 
     if (!containers.length) {
-      console.log(chalk.yellow('\nNo Docker containers running.\n'))
+      console.log(chalk.yellow('  No containers found.\n'))
     } else {
-      console.log(chalk.cyan('\nDocker Containers:\n'))
       containers.forEach((c) => {
         const name = c.Names[0].replace('/', '')
         const statusStr = c.State === 'running' ? chalk.green('running') : chalk.red('stopped')
@@ -611,60 +619,64 @@ async function showContainers() {
       })
     }
   } catch (err) {
-    console.log(chalk.red(`\nError: ${err.message}\n`))
+    console.log(chalk.red(`  Error: ${err.message}\n`))
   }
 
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showMainMenu()
 }
 
 async function showCodeServer() {
   console.clear()
+  console.log(chalk.cyan('\n  Code-Server\n'))
   try {
-    console.log(chalk.cyan('\nStarting Code-Server...\n'))
     const result = await ensureCodeServer()
     if (!result.success) {
-      console.log(chalk.red(`\n✗ ${result.message}\n`))
+      console.log(chalk.red(`  ✗ ${result.message}\n`))
     } else {
       const url = getCodeServerBaseUrl()
-      console.log(chalk.green(`✓ Code-Server running`))
+      console.log(chalk.green(`  ✓ Running`))
       console.log(`  URL:      ${url}`)
       console.log(`  Password: ${config.codeServerPassword}\n`)
     }
   } catch (err) {
-    console.log(chalk.red(`\nError: ${err.message}\n`))
+    console.log(chalk.red(`  Error: ${err.message}\n`))
   }
 
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showMainMenu()
 }
 
 async function showClaudeUsage() {
   console.clear()
+  console.log(chalk.cyan('\n  Claude Usage\n'))
   const text = getUsageText()
     .replace(/\*/g, '')
     .replace(/`/g, '')
     .replace(/_/g, '')
-  console.log(`\n${text}\n`)
+  console.log(`${text}\n`)
 
-  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showMainMenu()
 }
 
 async function openProjectCodeServer(name) {
+  console.clear()
+  console.log(chalk.cyan(`\n  Code-Server — ${name}\n`))
   try {
     const result = await ensureCodeServer()
     if (!result.success) {
-      console.log(chalk.red(`\n✗ ${result.message}\n`))
-      return
+      console.log(chalk.red(`  ✗ ${result.message}\n`))
+    } else {
+      const url = getCodeServerUrl(name)
+      console.log(chalk.green(`  ✓ Running`))
+      console.log(`  URL:      ${url}`)
+      console.log(`  Password: ${config.codeServerPassword}\n`)
     }
-    const url = getCodeServerUrl(name)
-    console.log(chalk.green(`\n✓ Code-Server ready`))
-    console.log(`  URL:      ${url}`)
-    console.log(`  Password: ${config.codeServerPassword}\n`)
   } catch (err) {
-    console.log(chalk.red(`\nError: ${err.message}\n`))
+    console.log(chalk.red(`  Error: ${err.message}\n`))
   }
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
 }
 
 async function showGitMenu(name) {
@@ -687,51 +699,45 @@ async function showGitMenu(name) {
 
   if (action === 'back') return
 
-  if (action === 'status') {
+  // Helper: show git result in a subsection
+  async function gitSubsection(title, fn) {
+    console.clear()
+    console.log(chalk.cyan(`\n  Git ${title} — ${name}\n`))
     try {
-      const result = await gitStatus(name)
-      const plain = result.replace(/\*/g, '').replace(/`/g, '')
-      console.log(`\n${plain}\n`)
+      await fn()
     } catch (err) {
       if (err.message === 'INIT_REPO_NEEDED') {
-        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
+        console.log(chalk.yellow('  ⚠ Not a Git repository. Use "Init Repository" first.\n'))
       } else {
-        console.log(chalk.red(`\nError: ${err.message}\n`))
+        console.log(chalk.red(`  Error: ${err.message}\n`))
       }
     }
+    await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
     return showGitMenu(name)
+  }
+
+  if (action === 'status') {
+    return gitSubsection('Status', async () => {
+      const result = await gitStatus(name)
+      const plain = result.replace(/\*/g, '').replace(/`/g, '')
+      console.log(`${plain}\n`)
+    })
   }
 
   if (action === 'push') {
-    try {
-      console.log(chalk.cyan('\nPushing...\n'))
+    return gitSubsection('Push', async () => {
       const result = await gitPush(name)
       const plain = result.replace(/\*/g, '').replace(/`/g, '')
-      console.log(`${plain}\n`)
-    } catch (err) {
-      if (err.message === 'INIT_REPO_NEEDED') {
-        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
-      } else {
-        console.log(chalk.red(`\nError: ${err.message}\n`))
-      }
-    }
-    return showGitMenu(name)
+      console.log(chalk.green(`${plain}\n`))
+    })
   }
 
   if (action === 'pull') {
-    try {
-      console.log(chalk.cyan('\nPulling...\n'))
+    return gitSubsection('Pull', async () => {
       const result = await gitPull(name)
       const plain = result.replace(/\*/g, '').replace(/`/g, '')
-      console.log(`${plain}\n`)
-    } catch (err) {
-      if (err.message === 'INIT_REPO_NEEDED') {
-        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
-      } else {
-        console.log(chalk.red(`\nError: ${err.message}\n`))
-      }
-    }
-    return showGitMenu(name)
+      console.log(chalk.green(`${plain}\n`))
+    })
   }
 
   if (action === 'commit') {
@@ -741,13 +747,10 @@ async function showGitMenu(name) {
       message: 'Commit message:',
       validate: (input) => input ? true : 'Message is required',
     }])
-    try {
+    return gitSubsection('Commit', async () => {
       const result = await gitCommit(name, message)
-      console.log(chalk.green(`\n${result}\n`))
-    } catch (err) {
-      console.log(chalk.red(`\nError: ${err.message}\n`))
-    }
-    return showGitMenu(name)
+      console.log(chalk.green(`  ${result}\n`))
+    })
   }
 
   if (action === 'init') {
@@ -756,13 +759,10 @@ async function showGitMenu(name) {
       name: 'gitUrl',
       message: 'Remote URL (leave empty for local only):',
     }])
-    try {
+    return gitSubsection('Init', async () => {
       await initGitRepo(name, gitUrl || null)
-      console.log(chalk.green(`\n✓ Git repository initialized${gitUrl ? ` (remote: ${gitUrl})` : ''}\n`))
-    } catch (err) {
-      console.log(chalk.red(`\nError: ${err.message}\n`))
-    }
-    return showGitMenu(name)
+      console.log(chalk.green(`  ✓ Repository initialized${gitUrl ? ` (remote: ${gitUrl})` : ''}\n`))
+    })
   }
 }
 
@@ -810,7 +810,7 @@ async function showConfig() {
   let serverIp = config.ipAddress || ''
   try { serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim() } catch {}
 
-  console.log(chalk.cyan('\nCurrent Configuration:\n'))
+  console.log(chalk.cyan('\n  Configuration\n'))
   console.log(`  Server IP:   ${serverIp || chalk.gray('unknown')}`)
   if (config.domain) {
     console.log(`  Domain:      ${chalk.green(config.domain)} (SSL)`)
@@ -872,14 +872,15 @@ async function showConfig() {
 
 async function configureClaude() {
   console.clear()
+  console.log(chalk.cyan('\n  Claude Code\n'))
   // Check if installed
   let installed = false
   try {
     const ver = execSync('claude --version 2>/dev/null', { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
-    console.log(chalk.green(`\n✓ Claude Code CLI: ${ver}\n`))
+    console.log(chalk.green(`  ✓ CLI: ${ver}\n`))
     installed = true
   } catch {
-    console.log(chalk.yellow('\nClaude Code CLI not installed.\n'))
+    console.log(chalk.yellow('  Not installed.\n'))
   }
 
   // Step 1: Install if needed
@@ -941,6 +942,7 @@ async function configureClaude() {
 
 async function configureDomain() {
   console.clear()
+  console.log(chalk.cyan('\n  Domain Setup\n'))
   const { domain } = await inquirer.prompt([{
     type: 'input',
     name: 'domain',
@@ -1061,12 +1063,13 @@ async function configureDomain() {
   }
 
   console.log()
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showConfig()
 }
 
 async function configureTelegram() {
   console.clear()
-  console.log(chalk.cyan('\n━━━ Telegram Bot Setup ━━━\n'))
+  console.log(chalk.cyan('\n  Telegram Bot\n'))
   console.log(chalk.gray('  1. Open Telegram and talk to @BotFather'))
   console.log(chalk.gray('  2. Send /newbot and follow the steps'))
   console.log(chalk.gray('  3. Copy the Bot Token\n'))
@@ -1088,7 +1091,7 @@ async function configureTelegram() {
   updateEnvVar('BOT_TOKEN', token)
 
   // Try to auto-detect Chat ID
-  console.log(chalk.cyan('\n━━━ Chat ID ━━━\n'))
+  console.log(chalk.cyan('\n  Chat ID\n'))
   console.log(chalk.gray('  Send any message to your bot in Telegram, then:'))
   console.log()
 
@@ -1182,6 +1185,7 @@ function stopBot() {
 
 async function manageTelegramBot() {
   console.clear()
+  console.log(chalk.cyan('\n  Telegram Bot\n'))
   let running = false
   try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); running = true } catch {}
 
@@ -1214,6 +1218,7 @@ async function manageTelegramBot() {
 
 async function configurePassword() {
   console.clear()
+  console.log(chalk.cyan('\n  Code-Server Password\n'))
   const { password } = await inquirer.prompt([{
     type: 'input',
     name: 'password',
@@ -1242,13 +1247,15 @@ async function configurePassword() {
     console.log(chalk.green(`\n✓ Password updated. New password: ${password}`))
     console.log(chalk.yellow('⚠ Could not restart code-server. Run: systemctl restart code-server\n'))
   }
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
   return showConfig()
 }
 
 async function configureIdleTimeout() {
   console.clear()
+  console.log(chalk.cyan('\n  Auto-sleep\n'))
   const current = config.idleTimeout
-  console.log(chalk.cyan(`\nAuto-sleep: ${current > 0 ? `${current} minutes` : 'disabled'}\n`))
+  console.log(chalk.gray(`  Current: ${current > 0 ? `${current} minutes` : 'disabled'}`))
   console.log(chalk.gray('  Idle containers are stopped to save resources.'))
   console.log(chalk.gray('  They wake automatically on the next request.\n'))
 
