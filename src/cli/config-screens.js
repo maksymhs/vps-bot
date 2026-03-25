@@ -288,7 +288,7 @@ async function configureDomain(nav) {
       const csConfigDir = `${process.env.HOME}/.config/code-server`
       mkdirSync(csConfigDir, { recursive: true })
       writeFileSync(join(csConfigDir, 'config.yaml'),
-        `bind-addr: 127.0.0.1:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
+        `bind-addr: 0.0.0.0:${csPort}\nauth: password\npassword: ${config.codeServerPassword}\ncert: false\n`)
       spawn('code-server', ['--disable-telemetry', config.projectsDir], {
         detached: true, stdio: 'ignore',
       }).unref()

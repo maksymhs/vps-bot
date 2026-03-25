@@ -35,11 +35,11 @@ export async function ensureCodeServer() {
     }
   }
 
-  // In domain mode, bind to 127.0.0.1 (Caddy handles SSL + proxy)
-  // In IP mode, bind to 0.0.0.0 (direct access)
-  const bindAddr = config.getNetworkType() === 'domain'
-    ? `127.0.0.1:${config.codeServerPort}`
-    : `0.0.0.0:${config.codeServerPort}`
+  // Bind to 0.0.0.0 in all modes:
+  // - IP mode: direct access on port
+  // - Domain mode: Caddy Docker proxy reaches host via host.docker.internal
+  //   which resolves to Docker bridge gateway, not 127.0.0.1
+  const bindAddr = `0.0.0.0:${config.codeServerPort}`
 
   // Write config.yaml so code-server uses our password
   try {
