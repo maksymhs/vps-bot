@@ -5,37 +5,17 @@ import { config } from './lib/config.js'
 import chalk from 'chalk'
 import { execSync } from 'child_process'
 
-console.clear()
-console.log(chalk.cyan(`
-┌─────────────────────────────────────────┐
-│         VPS-CODE-BOT  v1.0              │
-└─────────────────────────────────────────┘
-`))
-
-// Show status
-const net = config.domain
-  ? chalk.green(config.domain)
-  : chalk.green(`${config.ipAddress}:${config.port}`)
-const claude = config.claudeCli ? chalk.green('ready') : chalk.yellow('not set')
-const telegram = config.botToken ? chalk.green('on') : chalk.gray('off')
-
-console.log(`  Network:  ${net}`)
-console.log(`  Claude:   ${claude}`)
-console.log(`  Telegram: ${telegram}`)
-console.log(`  Projects: ${chalk.gray(config.projectsDir)}`)
-console.log()
-
-// If not configured, run setup
+// If not configured, run setup first
 if (!config.isSetupComplete()) {
-  console.log(chalk.yellow('Not configured. Running setup...\n'))
+  console.clear()
+  console.log(chalk.yellow('\nNot configured. Running setup...\n'))
   try {
     execSync('node src/setup.js', { stdio: 'inherit' })
   } catch {}
-  process.exit(0)
+  // Reload env after setup
+  const { config: dotenv } = await import('dotenv')
+  dotenv()
 }
 
-// Go straight to CLI dashboard
-try {
-  execSync('node src/cli.js', { stdio: 'inherit' })
-} catch {}
-process.exit(0)
+// Launch CLI directly (same process, keeps menu loop alive)
+await import('./cli.js')
