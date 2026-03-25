@@ -24,7 +24,7 @@ function demuxLogs(buffer) {
 
 export async function psCommand(ctx) {
   const containers = await getDocker().listContainers({ all: true })
-  if (!containers.length) return ctx.reply('No hay containers.')
+  if (!containers.length) return ctx.reply('No containers found.')
 
   const lines = containers.map(c => {
     const name = c.Names[0].replace('/', '')
@@ -41,15 +41,12 @@ export async function psCommand(ctx) {
 
 export async function logsCommand(ctx) {
   const name = ctx.message.text.split(' ').slice(1).join(' ').trim()
-  if (!name) return ctx.reply('Uso: /logs <nombre>')
+  if (!name) return ctx.reply('Usage: /logs <name>')
 
   const info = await findContainer(name)
-  if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
+  if (!info) return ctx.reply(`Container "${name}" not found.`)
 
-  // Mensaje inicial
-  const msg = await ctx.reply(`📋 Obteniendo logs de \`${name}\`...`, { parse_mode: 'Markdown' })
-
-  // Ejecutar docker logs con salida en vivo
+  const msg = await ctx.reply(`📋 Fetching logs for \`${name}\`...`, { parse_mode: 'Markdown' })
   await runLiveLogsStream(ctx, msg.message_id, name, 30)
 }
 
@@ -78,7 +75,7 @@ async function runLiveLogsStream(ctx, msgId, containerName, timeout = 30) {
           parse_mode: 'Markdown',
         })
       } catch (err) {
-        // Ignorar errores de rate limit
+        // Ignore rate limit errors
       }
     }
 
@@ -115,7 +112,7 @@ async function runLiveLogsStream(ctx, msgId, containerName, timeout = 30) {
 }
 
 function formatLogs(lines) {
-  if (lines.length === 0) return `📋 \`\`\`\nEsperando logs...\n\`\`\``
+  if (lines.length === 0) return `📋 \`\`\`\nWaiting for logs...\n\`\`\``
 
   const recent = lines.slice(-40)
   let content = recent.join('\n')
@@ -129,33 +126,33 @@ function formatLogs(lines) {
 
 export async function restartCommand(ctx) {
   const name = ctx.message.text.split(' ').slice(1).join(' ').trim()
-  if (!name) return ctx.reply('Uso: /restart <nombre>')
+  if (!name) return ctx.reply('Usage: /restart <name>')
 
   const info = await findContainer(name)
-  if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
+  if (!info) return ctx.reply(`Container "${name}" not found.`)
 
   await getDocker().getContainer(info.Id).restart()
-  return ctx.reply(`♻️ \`${name}\` reiniciado.`, { parse_mode: 'Markdown' })
+  return ctx.reply(`♻️ \`${name}\` restarted.`, { parse_mode: 'Markdown' })
 }
 
 export async function stopCommand(ctx) {
   const name = ctx.message.text.split(' ').slice(1).join(' ').trim()
-  if (!name) return ctx.reply('Uso: /stop <nombre>')
+  if (!name) return ctx.reply('Usage: /stop <name>')
 
   const info = await findContainer(name)
-  if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
+  if (!info) return ctx.reply(`Container "${name}" not found.`)
 
   await getDocker().getContainer(info.Id).stop()
-  return ctx.reply(`🛑 \`${name}\` parado.`, { parse_mode: 'Markdown' })
+  return ctx.reply(`🛑 \`${name}\` stopped.`, { parse_mode: 'Markdown' })
 }
 
 export async function startCommand(ctx) {
   const name = ctx.message.text.split(' ').slice(1).join(' ').trim()
-  if (!name) return ctx.reply('Uso: /start <nombre>')
+  if (!name) return ctx.reply('Usage: /start <name>')
 
   const info = await findContainer(name)
-  if (!info) return ctx.reply(`Container "${name}" no encontrado.`)
+  if (!info) return ctx.reply(`Container "${name}" not found.`)
 
   await getDocker().getContainer(info.Id).start()
-  return ctx.reply(`▶️ \`${name}\` arrancado.`, { parse_mode: 'Markdown' })
+  return ctx.reply(`▶️ \`${name}\` started.`, { parse_mode: 'Markdown' })
 }

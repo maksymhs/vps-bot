@@ -3,10 +3,10 @@ import { join } from 'path'
 
 const USAGE_FILE = join(process.cwd(), '.claude-usage.json')
 
-// Límites estimados (Claude API)
+// Estimated rate limits (Claude API)
 const LIMITS = {
   perMinute: 100,     // RPM (requests per minute)
-  perDay: 1000,       // Llamadas por día (estimado)
+  perDay: 1000,       // Calls per day (estimated)
   tokensPerMinute: 80000,
 }
 
@@ -52,7 +52,7 @@ export function getUsageStats() {
   const percentMin = Math.round((callsPerMin / LIMITS.perMinute) * 100)
   const percentDay = Math.round((callsPerDay / LIMITS.perDay) * 100)
 
-  // Calcula cuándo se resetea
+  // Calculate next reset time
   const oldestCall = usage.calls[0] ? new Date(usage.calls[0]) : new Date()
   const resetTime = new Date(oldestCall.getTime() + 24 * 60 * 60 * 1000)
   const hoursUntilReset = Math.max(0, Math.round((resetTime - new Date()) / (60 * 60 * 1000)))
@@ -73,11 +73,11 @@ export function getUsageStats() {
 export function getUsageText() {
   const stats = getUsageStats()
 
-  // Calcula porcentaje real con decimales
+  // Calculate real percentage with decimals
   const percentMinReal = (stats.callsPerMin / stats.limitsPerMin) * 100
   const percentDayReal = (stats.callsPerDay / stats.limitsPerDay) * 100
 
-  // Barra visual: 10 bloques
+  // Visual bar: 10 blocks
   const filledMin = Math.round(percentMinReal / 10)
   const filledDay = Math.round(percentDayReal / 10)
   const barMin = '█'.repeat(filledMin) + '░'.repeat(10 - filledMin)

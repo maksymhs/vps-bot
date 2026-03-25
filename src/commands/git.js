@@ -17,20 +17,20 @@ export async function initGitRepo(name, gitUrl) {
   const dir = join(config.projectsDir, name)
 
   try {
-    // Verificar si ya es un repo
+    // Check if already a git repo
     await run('git', ['status'], { cwd: dir })
-    return true // Ya es un repo
+    return true // Already a repo
   } catch {
-    // No es repo, inicializar
+    // Not a repo, initialize
     try {
       await run('git', ['init'], { cwd: dir })
       await run('git', ['config', 'user.email', 'bot@vps.local'], { cwd: dir })
       await run('git', ['config', 'user.name', 'VPS Bot'], { cwd: dir })
 
-      // Configurar rama a main
+      // Set default branch to main
       await run('git', ['config', 'init.defaultBranch', 'main'], { cwd: dir })
 
-      // Crear un archivo .gitkeep para garantizar que hay algo que commitear
+      // Create .gitkeep to ensure there's something to commit
       writeFileSync(join(dir, '.gitkeep'), '')
 
       await run('git', ['add', '.'], { cwd: dir })
@@ -42,7 +42,7 @@ export async function initGitRepo(name, gitUrl) {
 
       return true
     } catch (err) {
-      throw new Error(`Error inicializando repo: ${err.message}`)
+      throw new Error(`Error initializing repo: ${err.message}`)
     }
   }
 }
@@ -51,21 +51,21 @@ export async function gitCommit(name, message = null, token = null) {
   const dir = join(config.projectsDir, name)
 
   try {
-    // Hacer commit de cambios
+    // Commit changes
     await run('git', ['add', '.'], { cwd: dir })
 
-    const commitMsg = message || `Cambios en ${new Date().toLocaleString('es-ES')}`
+    const commitMsg = message || `Changes ${new Date().toISOString().slice(0, 16)}`
     try {
       await run('git', ['commit', '-m', commitMsg], { cwd: dir })
       return `✅ Commit: "${commitMsg}"`
     } catch (err) {
       if (err.message.includes('nothing to commit')) {
-        return `ℹ️ No hay cambios para commitear`
+        return `ℹ️ Nothing to commit`
       }
       throw err
     }
   } catch (err) {
-    throw new Error(`Error en commit: ${err.message}`)
+    throw new Error(`Commit error: ${err.message}`)
   }
 }
 
@@ -73,7 +73,7 @@ export async function gitPush(name, token = null) {
   const dir = join(config.projectsDir, name)
 
   try {
-    // Verificar si es un repo git
+    // Check if it's a git repo
     try {
       await run('git', ['status'], { cwd: dir })
     } catch (err) {
@@ -83,7 +83,7 @@ export async function gitPush(name, token = null) {
       throw err
     }
 
-    // Verificar si hay remote configurado
+    // Check if remote is configured
     let hasRemote = false
     try {
       const remotes = await run('git', ['remote'], { cwd: dir })
@@ -93,29 +93,29 @@ export async function gitPush(name, token = null) {
     }
 
     if (!hasRemote) {
-      return `ℹ️ No hay remote configurado\n\nEste es un repositorio Git local. Para subir a GitHub:\n1. Crea un repo vacío en GitHub\n2. Usa: \`git remote add origin <url>\`\n3. Luego: \`git push -u origin main\``
+      return `ℹ️ No remote configured\n\nThis is a local Git repository. To push to GitHub:\n1. Create an empty repo on GitHub\n2. Run: \`git remote add origin <url>\`\n3. Then: \`git push -u origin main\``
     }
 
-    // Hacer commit de cambios (automático)
+    // Auto-commit changes
     await run('git', ['add', '.'], { cwd: dir })
 
     try {
-      await run('git', ['commit', '-m', `Cambios en ${new Date().toLocaleString('es-ES')}`], { cwd: dir })
+      await run('git', ['commit', '-m', `Changes ${new Date().toISOString().slice(0, 16)}`], { cwd: dir })
     } catch {
-      // No hay cambios para commitear, está bien
+      // Nothing to commit, that's fine
     }
 
-    // Obtener la rama actual
+    // Get current branch
     let currentBranch = 'main'
     try {
       currentBranch = (await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir })).trim()
     } catch {
-      // Si falla, usar 'main' como default
+      // Fall back to 'main'
     }
 
     let pushCmd = ['push', '-u', 'origin', currentBranch]
 
-    // Si hay token, usarlo para autenticación
+    // Use token for authentication if provided
     if (token) {
       try {
         const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
@@ -126,17 +126,17 @@ export async function gitPush(name, token = null) {
           await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
         }
       } catch {
-        // Ignorar errores de remote
+        // Ignore remote URL errors
       }
     }
 
     const output = await run('git', pushCmd, { cwd: dir })
-    return `✅ Push completado\n\`${output.slice(0, 200)}\``
+    return `✅ Push complete\n\`${output.slice(0, 200)}\``
   } catch (err) {
     if (err.message === 'NO_GIT_REPO') {
       throw new Error('INIT_REPO_NEEDED')
     }
-    throw new Error(`Error en push: ${err.message}`)
+    throw new Error(`Push error: ${err.message}`)
   }
 }
 
@@ -144,7 +144,7 @@ export async function gitPull(name, token = null) {
   const dir = join(config.projectsDir, name)
 
   try {
-    // Verificar si es un repo git
+    // Check if it's a git repo
     try {
       await run('git', ['status'], { cwd: dir })
     } catch (err) {
@@ -154,7 +154,7 @@ export async function gitPull(name, token = null) {
       throw err
     }
 
-    // Verificar si hay remote configurado
+    // Check if remote is configured
     let hasRemote = false
     try {
       const remotes = await run('git', ['remote'], { cwd: dir })
@@ -164,18 +164,18 @@ export async function gitPull(name, token = null) {
     }
 
     if (!hasRemote) {
-      return `ℹ️ No hay remote configurado\n\nEste es un repositorio Git local. Para sincronizar con GitHub:\n1. Crea un repo vacío en GitHub\n2. Usa: \`git remote add origin <url>\`\n3. Luego: \`git pull origin main\``
+      return `ℹ️ No remote configured\n\nThis is a local Git repository. To sync with GitHub:\n1. Create an empty repo on GitHub\n2. Run: \`git remote add origin <url>\`\n3. Then: \`git pull origin main\``
     }
 
-    // Obtener la rama actual
+    // Get current branch
     let currentBranch = 'main'
     try {
       currentBranch = (await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir })).trim()
     } catch {
-      // Si falla, usar 'main' como default
+      // Fall back to 'main'
     }
 
-    // Si hay token, usarlo
+    // Use token for authentication if provided
     if (token) {
       try {
         const remoteWithAuth = await run('git', ['remote', 'get-url', 'origin'], { cwd: dir })
@@ -186,17 +186,17 @@ export async function gitPull(name, token = null) {
           await run('git', ['remote', 'set-url', 'origin', authRemote], { cwd: dir })
         }
       } catch {
-        // Ignorar errores de remote
+        // Ignore remote URL errors
       }
     }
 
     const output = await run('git', ['pull', 'origin', currentBranch], { cwd: dir })
-    return `✅ Pull completado\n\`${output.slice(0, 200)}\``
+    return `✅ Pull complete\n\`${output.slice(0, 200)}\``
   } catch (err) {
     if (err.message === 'INIT_REPO_NEEDED') {
       throw new Error('INIT_REPO_NEEDED')
     }
-    throw new Error(`Error en pull: ${err.message}`)
+    throw new Error(`Pull error: ${err.message}`)
   }
 }
 
@@ -209,16 +209,16 @@ export async function gitStatus(name) {
 
     return `📊 *Status Git*
 
-*Cambios:*
-\`${status || 'Sin cambios'}\`
+*Changes:*
+\`${status || 'No changes'}\`
 
-*Últimos commits:*
+*Recent commits:*
 \`${log}\``
   } catch (err) {
     if (err.message.includes('not a git repository')) {
       throw new Error('INIT_REPO_NEEDED')
     }
-    throw new Error(`Error en status: ${err.message}`)
+    throw new Error(`Status error: ${err.message}`)
   }
 }
 

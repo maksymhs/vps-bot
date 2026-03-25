@@ -5,6 +5,9 @@
   "type": "module",
   "author": "maksymhs (https://github.com/maksymhs)",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/maksymhs/vps-bot.git"
