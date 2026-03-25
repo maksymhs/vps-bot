@@ -14,9 +14,9 @@ export const config = {
 
   // Network configuration
   // Can be either DOMAIN or IP_ADDRESS + PORT
-  domain: process.env.DOMAIN,
-  ipAddress: process.env.IP_ADDRESS,
-  port: parseInt(process.env.PORT ?? '80'),
+  get domain() { return process.env.DOMAIN || undefined },
+  get ipAddress() { return process.env.IP_ADDRESS || undefined },
+  get port() { return parseInt(process.env.PORT ?? '80') },
 
   // Generate project URL based on network config
   projectUrl: (name) => {
@@ -30,20 +30,20 @@ export const config = {
   },
 
   // Telegram Bot (optional)
-  botToken: process.env.BOT_TOKEN,
-  chatId: process.env.CHAT_ID ? parseInt(process.env.CHAT_ID) : null,
+  get botToken() { return process.env.BOT_TOKEN || undefined },
+  get chatId() { return process.env.CHAT_ID ? parseInt(process.env.CHAT_ID) : null },
   hasTelegramBot() {
     return !!(this.botToken && this.chatId)
   },
 
   // Claude CLI (required)
-  claudeCli: process.env.CLAUDE_CLI,
-  nodeBin: process.env.NODE_BIN ?? '/usr/bin/node',
-  openrouterKey: process.env.OPENROUTER_API_KEY ?? null,
+  get claudeCli() { return process.env.CLAUDE_CLI || undefined },
+  get nodeBin() { return process.env.NODE_BIN ?? '/usr/bin/node' },
+  get openrouterKey() { return process.env.OPENROUTER_API_KEY ?? null },
 
   // Code-Server
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT ?? '8080'),
-  codeServerPassword: process.env.CODE_SERVER_PASSWORD ?? 'changeme',
+  get codeServerPassword() { return process.env.CODE_SERVER_PASSWORD ?? 'changeme' },
 
   // Caddy Admin API
   caddyAdminUrl: process.env.CADDY_ADMIN_URL ?? 'http://localhost:2019',
