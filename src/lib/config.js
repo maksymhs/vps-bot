@@ -45,6 +45,10 @@ export const config = {
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT ?? '8080'),
   get codeServerPassword() { return process.env.CODE_SERVER_PASSWORD ?? 'changeme' },
 
+  // Templates
+  get templatesRepo() { return process.env.TEMPLATES_REPO ?? 'https://github.com/maksymhs/vps-bot-templates.git' },
+  get templatesDir() { return process.env.TEMPLATES_DIR ?? '/root/vps-bot-templates' },
+
   // Auto-sleep: stop idle containers after N minutes (0 = disabled)
   get idleTimeout() { return parseInt(process.env.IDLE_TIMEOUT ?? '0') },
 

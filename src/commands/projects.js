@@ -8,6 +8,7 @@ import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
 import { log } from '../lib/logger.js'
 import { initGitRepo, gitCommit } from './git.js'
+import { syncTemplates, matchTemplate, copyBoilerplate, getInstructions, getBoilerplateFiles } from '../lib/templates.js'
 
 const MAX_RETRIES = 2
 
@@ -147,7 +148,12 @@ networks:
   writeFileSync(join(dir, 'docker-compose.yml'), compose)
 }
 
-function buildClaudePrompt(name, description, errorContext = null) {
+function buildClaudePrompt(name, description, errorContext = null, templateInfo = null) {
+  // If we have a matched template, use template-aware prompt
+  if (templateInfo) {
+    return buildTemplatePrompt(name, description, templateInfo, errorContext)
+  }
+
   const base =
     `Create a complete, functional Node.js web application.\n\n` +
     `Name: ${name}\n` +
@@ -174,6 +180,39 @@ function buildClaudePrompt(name, description, errorContext = null) {
   if (!errorContext) return base
 
   return base + `\n\n⚠️ FIX: The previous attempt failed with this error. Analyze and fix the code:\n${errorContext}`
+}
+
+function buildTemplatePrompt(name, description, templateInfo, errorContext = null) {
+  const { templateName, instructions, boilerplateFiles } = templateInfo
+  const fileList = boilerplateFiles.map(f => `  - ${f}`).join('\n')
+
+  let prompt =
+    `Build a web application based on the "${templateName}" template.\n\n` +
+    `Name: ${name}\n` +
+    `Description: ${description}\n\n` +
+    `TEMPLATE BOILERPLATE FILES (already in project directory):\n${fileList}\n\n`
+
+  if (instructions) {
+    prompt += `TEMPLATE INSTRUCTIONS:\n${instructions}\n\n`
+  }
+
+  prompt +=
+    `YOUR TASK:\n` +
+    `1. The boilerplate files above are already copied into the project directory\n` +
+    `2. Customize and extend them to match the user's description\n` +
+    `3. Modify existing files as needed — you can overwrite any boilerplate file\n` +
+    `4. Add new files if the description requires functionality beyond the template\n` +
+    `5. Update package.json name to "${name}"\n` +
+    `6. Ensure GET /health returns { status: "ok" } — MANDATORY\n` +
+    `7. Use ONLY ASCII characters in code\n` +
+    `8. Do NOT add the project name as a visible title\n\n` +
+    `Write ALL modified/new files to disk. Code only, no explanations.`
+
+  if (errorContext) {
+    prompt += `\n\n⚠️ FIX: The previous attempt failed with this error. Analyze and fix the code:\n${errorContext}`
+  }
+
+  return prompt
 }
 
 function buildRebuildPrompt(name, description, mode, existingFiles, errorContext = null) {
@@ -223,10 +262,10 @@ function getExistingFiles(dir) {
   }
 }
 
-async function runClaude(dir, name, description, onProgress = null, errorContext = null, model = 'claude-sonnet-4-6', mode = 'new') {
+async function runClaude(dir, name, description, onProgress = null, errorContext = null, model = 'claude-sonnet-4-6', mode = 'new', templateInfo = null) {
   const existingFiles = mode === 'new' ? [] : getExistingFiles(dir)
   const prompt = mode === 'new' || mode === 'full'
-    ? buildClaudePrompt(name, description, errorContext)
+    ? buildClaudePrompt(name, description, errorContext, templateInfo)
     : buildRebuildPrompt(name, description, 'patch', existingFiles, errorContext)
 
   const { readdirSync, statSync } = await import('fs')
@@ -574,12 +613,47 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
 
   log.info(`[${name}] build start`, `model=${model} dir=${dir} mode=${mode}`)
 
+  // Template flow: sync repo, match template, copy boilerplate (only for new/full builds)
+  let templateInfo = null
+  if (mode === 'new' || mode === 'full') {
+    await onStatus('📦 Syncing templates...')
+    const synced = syncTemplates()
+    if (synced) {
+      const match = matchTemplate(description)
+      if (match) {
+        const { template } = match
+        log.info(`[${name}] template matched: ${template.name} (score=${match.score})`)
+        await onStatus(`📋 Using template: ${template.displayName}`)
+
+        // Copy boilerplate files into project directory
+        const copied = copyBoilerplate(template.name, dir)
+        if (copied) {
+          // Ensure vpsbot user can write to copied files
+          try { execSync(`chown -R vpsbot:vpsbot ${JSON.stringify(dir)}`) } catch {}
+
+          templateInfo = {
+            templateName: template.name,
+            instructions: getInstructions(template.name),
+            boilerplateFiles: getBoilerplateFiles(template.name),
+          }
+          // Save template used in store for future reference
+          store.set(name, { template: template.name })
+          log.info(`[${name}] boilerplate copied, ${templateInfo.boilerplateFiles.length} files`)
+        }
+      } else {
+        log.info(`[${name}] no template matched, using generic build`)
+      }
+    } else {
+      log.info(`[${name}] templates sync failed, using generic build`)
+    }
+  }
+
   if (isOpenRouterModel(model)) {
     await onStatus('🧠 Generating code...')
     await runOpenRouter(dir, name, description, errorContext, model.replace('openrouter/', ''))
   } else {
     try {
-      await runClaude(dir, name, description, onStatus, errorContext, model, mode)
+      await runClaude(dir, name, description, onStatus, errorContext, model, mode, templateInfo)
       log.info(`[${name}] code generated`)
     } catch (err) {
       log.error(`[${name}] code generation failed`, err.message)

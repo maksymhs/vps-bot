@@ -18,7 +18,10 @@
   You: "A real-time chat app with rooms"
    │
    ▼
-  Claude Code → generates full project
+  Template matching → selects best starter template
+   │
+   ▼
+  Claude Code → customizes & generates full project
    │
    ▼
   Docker → builds & deploys container
@@ -166,6 +169,30 @@ Save resources by automatically stopping idle containers. From **Configuration �
 - Wake manually from CLI (`☀️ Wake`) or Telegram
 - All sleep/wake events logged to `logs/system.log`
 
+## Templates
+
+vps-bot uses a public template repository ([vps-bot-templates](https://github.com/maksymhs/vps-bot-templates)) to accelerate app generation. When you create a new project, vps-bot automatically:
+
+1. **Syncs** the templates repo (git clone/pull)
+2. **Matches** the best template based on your description
+3. **Copies** boilerplate files into the project directory
+4. **Generates** customized code using template instructions
+
+### Available Templates
+
+| Template | Best for |
+|---|---|
+| **Express API** | REST APIs, webhooks, microservices |
+| **Next.js App** | Dashboards, SaaS, admin panels, full-stack apps |
+| **Static Site** | Portfolios, blogs, documentation |
+| **React + Vite** | Interactive SPAs, tools, calculators, games |
+| **Landing Page** | Marketing pages, product launches, waitlists |
+| **Python FastAPI** | Python APIs, ML serving, data processing |
+
+If no template matches your description well enough, vps-bot falls back to the generic build prompt. Templates are only used for new and full rebuild — patch rebuilds modify existing code directly.
+
+Custom template repo: set `TEMPLATES_REPO` in `.env`.
+
 ## Architecture
 
 ```
@@ -176,13 +203,14 @@ Save resources by automatically stopping idle containers. From **Configuration �
              │
          vps-bot
              │
-   ┌─────────┼──────────┐
-   │         │          │
-Claude    Docker     Caddy
- Code     Build    (SSL)
-   │         │          │
-   ▼         ▼          ▼
- Code → Container → https://
+  ┌──────────┼──────────┬──────────┐
+  │          │          │          │
+Templates  Claude    Docker     Caddy
+ (git)     Code      Build     (SSL)
+  │          │          │          │
+  ▼          ▼          ▼          ▼
+Boiler → Customized → Container → https://
+plate      Code
 ```
 
 ## Project Structure
@@ -214,6 +242,7 @@ vps-bot/
 │       ├── code-server.js  # IDE management
 │       ├── usage.js        # Claude API usage tracking
 │       ├── logger.js       # Centralized logging
+│       ├── templates.js    # Template sync, matching & boilerplate
 │       ├── branding.js     # Branding + ASCII banner
 │       └── caddy.js        # Caddy admin API
 ├── logs/                   # All logs (system, install, per-project)
