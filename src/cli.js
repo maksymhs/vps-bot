@@ -23,6 +23,15 @@ import { wakeContainer, startSleepManager, stopSleepManager } from './lib/sleep-
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envFile = join(dirname(__dirname), '.env')
 
+// Shared header for submenus (banner + section title)
+function printHeader(section) {
+  console.clear()
+  console.log(chalk.cyan(getBanner()))
+  if (section) {
+    console.log(chalk.gray(`  ${section}\n`))
+  }
+}
+
 // CLI spinner for build progress
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 let spinnerInterval = null
@@ -103,9 +112,7 @@ const cliCtx = {
 }
 
 async function showMainMenu(clear = true) {
-  if (clear) console.clear()
-  console.log(chalk.cyan(getBanner()))
-  console.log(chalk.gray(`  ${PROJECT.tagline}  ·  v${PROJECT.version}\n`))
+  if (clear) printHeader(`${PROJECT.tagline}  ·  v${PROJECT.version}`)
 
   const { action } = await inquirer.prompt([
     {
@@ -149,8 +156,7 @@ async function showMainMenu(clear = true) {
 }
 
 async function showSystemLogs() {
-  console.clear()
-  console.log(chalk.cyan('\n  System Logs\n'))
+  printHeader('System Logs')
   const { readdirSync } = await import('fs')
   const logsDir = log.dir
 
@@ -180,8 +186,7 @@ async function showSystemLogs() {
   if (file === 'back') return showConfig()
 
   // Show log file in subsection
-  console.clear()
-  console.log(chalk.cyan(`\n  ${file}\n`))
+  printHeader(file)
   const filePath = join(logsDir, file)
   if (existsSync(filePath)) {
     const content = readFileSync(filePath, 'utf8')
@@ -196,7 +201,7 @@ async function showSystemLogs() {
 }
 
 async function showProjects() {
-  console.clear()
+  printHeader('Projects')
   const projects = store.getAll()
   const names = Object.keys(projects)
 
@@ -234,7 +239,7 @@ async function showProjects() {
 }
 
 async function showProjectMenu(name) {
-  console.clear()
+  printHeader(name)
   const project = store.get(name)
   if (!project) {
     console.log(chalk.red(`\nProject "${name}" not found.\n`))
@@ -250,7 +255,7 @@ async function showProjectMenu(name) {
     const isSleeping = project.sleeping && status !== 'running'
     const statusStr = isSleeping ? chalk.yellow('sleeping') : status === 'running' ? chalk.green('running') : chalk.red('stopped')
 
-    console.log(chalk.cyan(`\n[${name}] Status: ${statusStr}\n`))
+    console.log(`  Status: ${statusStr}\n`)
 
     const { action } = await inquirer.prompt([
       {
@@ -278,9 +283,8 @@ async function showProjectMenu(name) {
 
     if (action === 'back') return showProjects()
     if (action === 'url') {
-      console.clear()
+      printHeader(`URL — ${name}`)
       const url = project.url || (project.port ? `http://${config.ipAddress || 'localhost'}:${project.port}` : '(no URL)')
-      console.log(chalk.cyan(`\n  URL — ${name}\n`))
       console.log(`  ${url}\n`)
       await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
       return showProjectMenu(name)
@@ -327,8 +331,7 @@ async function showProjectMenu(name) {
 }
 
 async function showLogs(name) {
-  console.clear()
-  console.log(chalk.cyan(`\n  Logs — ${name}\n`))
+  printHeader(`Logs — ${name}`)
   try {
     const containers = await getDocker().listContainers({
       all: true,
@@ -440,7 +443,7 @@ async function rebuildProject(name) {
 }
 
 async function showNewProject() {
-  console.clear()
+  printHeader('New Project')
   // Step 1: Check Claude Code is installed
   let claudeInstalled = false
   try {
@@ -581,8 +584,7 @@ async function showNewProject() {
 }
 
 async function showStatus() {
-  console.clear()
-  console.log(chalk.cyan('\n  Server Status\n'))
+  printHeader('Server Status')
   try {
     const [cpu, mem, disk] = await Promise.all([si.currentLoad(), si.mem(), si.fsSize()])
     const gb = (b) => (b / 1024 ** 3).toFixed(1)
@@ -601,8 +603,7 @@ async function showStatus() {
 }
 
 async function showContainers() {
-  console.clear()
-  console.log(chalk.cyan('\n  Docker Containers\n'))
+  printHeader('Docker Containers')
   try {
     const containers = await getDocker().listContainers({ all: true })
 
@@ -627,8 +628,7 @@ async function showContainers() {
 }
 
 async function showCodeServer() {
-  console.clear()
-  console.log(chalk.cyan('\n  Code-Server\n'))
+  printHeader('Code-Server')
   try {
     const result = await ensureCodeServer()
     if (!result.success) {
@@ -648,8 +648,7 @@ async function showCodeServer() {
 }
 
 async function showClaudeUsage() {
-  console.clear()
-  console.log(chalk.cyan('\n  Claude Usage\n'))
+  printHeader('Claude Usage')
   const text = getUsageText()
     .replace(/\*/g, '')
     .replace(/`/g, '')
@@ -661,8 +660,7 @@ async function showClaudeUsage() {
 }
 
 async function openProjectCodeServer(name) {
-  console.clear()
-  console.log(chalk.cyan(`\n  Code-Server — ${name}\n`))
+  printHeader(`Code-Server — ${name}`)
   try {
     const result = await ensureCodeServer()
     if (!result.success) {
@@ -680,7 +678,7 @@ async function openProjectCodeServer(name) {
 }
 
 async function showGitMenu(name) {
-  console.clear()
+  printHeader(`Git — ${name}`)
   const { action } = await inquirer.prompt([{
     type: 'list',
     name: 'action',
@@ -701,8 +699,7 @@ async function showGitMenu(name) {
 
   // Helper: show git result in a subsection
   async function gitSubsection(title, fn) {
-    console.clear()
-    console.log(chalk.cyan(`\n  Git ${title} — ${name}\n`))
+    printHeader(`Git ${title} — ${name}`)
     try {
       await fn()
     } catch (err) {
