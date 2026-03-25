@@ -83,13 +83,13 @@ export function getUsageText() {
   const barMin = '█'.repeat(filledMin) + '░'.repeat(10 - filledMin)
   const barDay = '█'.repeat(filledDay) + '░'.repeat(10 - filledDay)
 
-  return `⚡ *Uso de Claude*
+  return `⚡ *Claude Usage*
 
-⏱️ *Por minuto:*
+⏱️ *Per minute:*
 \`${barMin}\` ${stats.callsPerMin}/${stats.limitsPerMin} (${percentMinReal.toFixed(1)}%)
 
-📅 *Por día:*
+📅 *Per day:*
 \`${barDay}\` ${stats.callsPerDay}/${stats.limitsPerDay} (${percentDayReal.toFixed(1)}%)
 
-🔄 Reseteo en: ${stats.hoursUntilReset}h`
+🔄 Resets in: ${stats.hoursUntilReset}h`
 }

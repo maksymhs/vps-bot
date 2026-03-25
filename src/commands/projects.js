@@ -236,7 +236,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
   log.build(name, 'Prompt:', prompt)
 
   if (onProgress) {
-    await onProgress('🧠 Generando código...')
+    await onProgress('🧠 Generating code...')
   }
 
   // Track files created during build
@@ -335,7 +335,7 @@ async function runOpenRouter(dir, name, description, errorContext = null, model 
   const content = data.choices?.[0]?.message?.content
 
   if (!content) {
-    throw new Error('OpenRouter no devolvió contenido')
+    throw new Error('OpenRouter returned no content')
   }
 
   // OpenRouter models usually return code in markdown blocks, extract them
@@ -494,7 +494,7 @@ async function dockerComposeUp(dir, onProgress = null) {
 
     child.on('close', async (code) => {
       if (code !== 0) {
-        reject(new Error(`docker compose up falló\n${allLines.slice(-3).join('\n')}`))
+        reject(new Error(`docker compose up failed\n${allLines.slice(-3).join('\n')}`))
       } else {
         resolve()
       }
@@ -575,7 +575,7 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
   log.info(`[${name}] build start`, `model=${model} dir=${dir} mode=${mode}`)
 
   if (isOpenRouterModel(model)) {
-    await onStatus('🧠 Generando código...')
+    await onStatus('🧠 Generating code...')
     await runOpenRouter(dir, name, description, errorContext, model.replace('openrouter/', ''))
   } else {
     try {
@@ -583,7 +583,7 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
       log.info(`[${name}] code generated`)
     } catch (err) {
       log.error(`[${name}] code generation failed`, err.message)
-      throw new Error(`Error generando código: ${err.message}`)
+      throw new Error(`Code generation failed: ${err.message}`)
     }
   }
 
