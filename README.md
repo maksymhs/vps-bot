@@ -89,10 +89,10 @@ The installer handles everything: Node.js, Docker, Caddy, Claude Code, code-serv
 
   Creating chat-app
 
-  ⠹ Generando codigo...
-  ⠼ Construyendo imagen...
-  ⠧ Verificando...
-  ✓ Listo → http://185.x.x.x:4000
+  ⠹ Generating code...
+  ⠼ Building image...
+  ⠧ Verifying...
+  ✓ Ready → http://185.x.x.x:4000
 ```
 
 ### Rebuilding
@@ -106,21 +106,21 @@ The installer handles everything: Node.js, Docker, Caddy, Claude Code, code-serv
 
   Rebuilding chat-app
 
-  ⠹ Aplicando cambios...
-  ✓ Listo → http://185.x.x.x:4000
+  ⠹ Applying changes...
+  ✓ Ready → http://185.x.x.x:4000
 ```
 
 ## Telegram Bot
 
 ```
 ⚙️ chat-app
-� Construyendo imagen... 1m 12s
+🔨 Building image... 1m 12s
 ```
 ```
-✅ chat-app creado
-� https://chat.yourdomain.com
+✅ chat-app created
+🔗 https://chat.yourdomain.com
 [♻️ Rebuild] [📋 Logs]
-[🔗 URL]    [⬅️ Lista]
+[🔗 URL]    [⬅️ List]
 ```
 
 ### Commands
@@ -190,26 +190,33 @@ Claude    Docker     Caddy
 ```
 vps-bot/
 ├── src/
-│   ├── bot.js              # Telegram bot
-│   ├── cli.js              # CLI dashboard
-│   ├── cli-home.js         # Entry point
-│   ├── setup.js            # Setup wizard
+│   ├── bot.js              # Telegram bot entry point
+│   ├── cli.js              # CLI main menu orchestrator
+│   ├── cli-home.js         # CLI entry point (setup check)
+│   ├── setup.js            # First-run setup wizard
 │   ├── commands/
 │   │   ├── projects.js     # AI generation + Docker deploy
 │   │   ├── docker.js       # Container management
 │   │   ├── git.js          # Git operations
-│   │   ├── menu.js         # Telegram UI menus
-│   │   └── status.js       # Server stats
+│   │   ├── menu.js         # Telegram inline keyboard menus
+│   │   └── status.js       # Server resource stats
+│   ├── cli/
+│   │   ├── ui.js           # CLI helpers (header, spinner, env)
+│   │   ├── screens.js      # Status, containers, code-server screens
+│   │   ├── config-screens.js # Domain, Telegram, password, auto-sleep
+│   │   └── project-screens.js # Project CRUD, logs, git, rebuild
 │   └── lib/
 │       ├── config.js       # Environment config
+│       ├── store.js        # Project state (JSON file)
+│       ├── docker-client.js # Dockerode singleton
+│       ├── sleep-manager.js # Auto-sleep + wake proxy
+│       ├── build-state.js  # In-progress build tracking
 │       ├── code-server.js  # IDE management
-│       ├── docker-client.js
-│       ├── store.js        # Project state (JSON)
-│       ├── usage.js        # API usage tracking
+│       ├── usage.js        # Claude API usage tracking
 │       ├── logger.js       # Centralized logging
-│       ├── branding.js     # Branding + ASCII art
+│       ├── branding.js     # Branding + ASCII banner
 │       └── caddy.js        # Caddy admin API
-├── logs/                   # All logs (system, install, per-project builds)
+├── logs/                   # All logs (system, install, per-project)
 ├── install.sh              # One-command installer
 └── .env                    # Auto-generated config
 ```
@@ -218,7 +225,7 @@ vps-bot/
 
 | | |
 |---|---|
-| **AI** | Claude Code (Sonnet / Opus / Haiku) |
+| **AI** | Claude Code (Sonnet / Opus / Haiku) + OpenRouter models |
 | **Runtime** | Node.js 20 |
 | **Containers** | Docker + Compose |
 | **Proxy** | Caddy (auto SSL) |
@@ -237,6 +244,28 @@ All logs centralized in `logs/`:
 | `build-{name}.log` | Per-project: prompt, Claude output, Docker build, health checks |
 
 View from CLI: **Configuration → View System Logs**
+
+## Requirements
+
+- **VPS** with 1+ GB RAM (Ubuntu/Debian recommended)
+- **Root access** (everything runs as root except Claude Code)
+- **Ports** 80 and 443 open (for domain mode) or any port for IP mode
+- **Claude API key** (for Claude Code) or OpenRouter API key
+
+## After Reboot
+
+All services auto-recover after a VPS reboot:
+
+| Component | Auto-starts | Mechanism |
+|---|---|---|
+| Docker | ✅ | systemd |
+| Project containers | ✅ | `restart: unless-stopped` |
+| Caddy proxy (SSL) | ✅ | Docker restart policy |
+| Code-Server | ✅ | systemd |
+| Telegram bot | ✅ | systemd (if enabled) |
+| Sleep manager | ✅ | Starts with Telegram bot |
+
+On startup, sleeping flags are reconciled with actual Docker state — containers that Docker restarted are correctly shown as running.
 
 ## Troubleshooting
 
@@ -259,7 +288,7 @@ npm run setup
 
 ## License
 
-MIT © 2025 [Maksym](https://github.com/maksymhs)
+MIT © 2025-2026 [Maksym](https://github.com/maksymhs)
 
 ---
 
