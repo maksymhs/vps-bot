@@ -296,7 +296,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
     const claudeBin = config.claudeCli || 'claude'
     // Write prompt + runner to temp files to avoid bash escaping issues
     const tmpPrompt = join(dir, '.claude-prompt.txt')
-    const tmpRunner = join(dir, '.claude-run.js')
+    const tmpRunner = join(dir, '.claude-run.cjs')
     writeFileSync(tmpPrompt, prompt)
     writeFileSync(tmpRunner, [
       `const p = require("fs").readFileSync(${JSON.stringify(tmpPrompt)}, "utf8");`,
@@ -310,7 +310,7 @@ async function runClaude(dir, name, description, onProgress = null, errorContext
       `}`,
     ].join('\n') + '\n')
     try { execSync(`chown vpsbot:vpsbot ${JSON.stringify(tmpPrompt)} ${JSON.stringify(tmpRunner)}`) } catch {}
-    const output = await run('su', ['-', 'vpsbot', '-c', `cd ${JSON.stringify(dir)} && node .claude-run.js`], { timeout: 300_000 })
+    const output = await run('su', ['-', 'vpsbot', '-c', `cd ${JSON.stringify(dir)} && node .claude-run.cjs`], { timeout: 300_000 })
     try { rmSync(tmpPrompt) } catch {}
     try { rmSync(tmpRunner) } catch {}
     log.build(name, 'Claude output:', output || '(no stdout)')
@@ -355,7 +355,7 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
   const claudeBin = config.claudeCli || 'claude'
   // Write prompt + runner to temp files to avoid bash escaping issues
   const tmpPrompt = join(dir, '.claude-prompt.txt')
-  const tmpRunner = join(dir, '.claude-run.js')
+  const tmpRunner = join(dir, '.claude-run.cjs')
   writeFileSync(tmpPrompt, prompt)
   writeFileSync(tmpRunner, [
     `const p = require("fs").readFileSync(${JSON.stringify(tmpPrompt)}, "utf8");`,
@@ -369,7 +369,7 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
     `}`,
   ].join('\n') + '\n')
   try { execSync(`chown vpsbot:vpsbot ${JSON.stringify(tmpPrompt)} ${JSON.stringify(tmpRunner)}`) } catch {}
-  await runWithStreaming('su', ['-', 'vpsbot', '-c', `cd ${JSON.stringify(dir)} && node .claude-run.js`], {
+  await runWithStreaming('su', ['-', 'vpsbot', '-c', `cd ${JSON.stringify(dir)} && node .claude-run.cjs`], {
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
 
