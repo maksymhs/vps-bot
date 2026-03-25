@@ -34,7 +34,10 @@ export async function showMain(ctx, edit = false) {
     ],
     [Markup.button.callback('🚀 Mis proyectos', 'list')],
     [Markup.button.callback('➕ Nuevo proyecto', 'new')],
-    [Markup.button.callback('⚡ Claude Usage', 'usage')],
+    [
+      Markup.button.callback('💻 Code-Server', 'codeserver'),
+      Markup.button.callback('⚡ Claude Usage', 'usage'),
+    ],
   ])
   return edit
     ? ctx.editMessageText(text, { parse_mode: 'Markdown', ...kb })

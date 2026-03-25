@@ -12,10 +12,12 @@ import inquirer from 'inquirer'
 import si from 'systeminformation'
 import chalk from 'chalk'
 import { execFile, execSync, spawn } from 'child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { log } from './lib/logger.js'
+import { getCodeServerUrl, getCodeServerBaseUrl, ensureCodeServer } from './lib/code-server.js'
+import { gitPush, gitPull, gitStatus, initGitRepo, gitCommit } from './commands/git.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envFile = join(dirname(__dirname), '.env')
@@ -53,6 +55,8 @@ async function showMainMenu(clear = true) {
         { name: 'Create New Project', value: 'new' },
         { name: 'Server Status', value: 'status' },
         { name: 'Docker Containers', value: 'containers' },
+        { name: 'Code-Server (IDE)', value: 'codeserver' },
+        { name: 'Claude Usage', value: 'usage' },
         new inquirer.Separator(chalk.gray('─────────────────')),
         { name: 'Configuration', value: 'config' },
         { name: 'Exit', value: 'exit' },
@@ -69,6 +73,10 @@ async function showMainMenu(clear = true) {
       return showStatus()
     case 'containers':
       return showContainers()
+    case 'codeserver':
+      return showCodeServer()
+    case 'usage':
+      return showClaudeUsage()
     case 'config':
       return showConfig()
     case 'exit':
@@ -78,7 +86,6 @@ async function showMainMenu(clear = true) {
 }
 
 async function showSystemLogs() {
-  const { existsSync, readFileSync } = await import('fs')
   if (!existsSync(log.file)) {
     console.log(chalk.yellow('\nNo logs yet.\n'))
   } else {
@@ -147,8 +154,11 @@ async function showProjectMenu(name) {
             ? [{ name: 'Stop', value: 'stop' }]
             : [{ name: 'Start', value: 'start' }]),
           { name: 'Rebuild', value: 'rebuild' },
+          { name: 'Code-Server (IDE)', value: 'codeserver' },
+          { name: 'Git', value: 'git' },
           { name: 'Copy URL', value: 'url' },
           new inquirer.Separator(),
+          { name: 'Delete Project', value: 'delete' },
           { name: 'Back', value: 'back' },
         ],
       },
@@ -175,6 +185,18 @@ async function showProjectMenu(name) {
     if (action === 'rebuild') {
       await rebuildProject(name)
       return showProjectMenu(name)
+    }
+    if (action === 'codeserver') {
+      await openProjectCodeServer(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'git') {
+      await showGitMenu(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'delete') {
+      await deleteProject(name)
+      return showProjects()
     }
   } catch (err) {
     log.error(`[cli] project action failed for ${name}`, err.message)
@@ -284,11 +306,15 @@ async function rebuildProject(name) {
     const { deployRebuild } = await import('./commands/projects.js')
     const ok = await deployRebuild(cliCtx, name, description, model, mode)
     if (ok) {
-      console.log(chalk.green(`\n${name} rebuilt successfully!\n`))
+      console.log(chalk.green(`\n✓ ${name} rebuilt successfully!\n`))
+    } else {
+      console.log(chalk.red(`\n✗ Rebuild failed.\n`))
     }
   } catch (err) {
     console.error(chalk.red(`\nRebuild failed: ${err.message}\n`))
   }
+
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Continue'] }])
 }
 
 async function showNewProject() {
@@ -421,15 +447,18 @@ async function showNewProject() {
     if (ok) {
       const p = store.get(name)
       const url = p?.url || (p?.port ? `http://${config.ipAddress || 'localhost'}:${p.port}` : '')
-      console.log(chalk.green(`\n${name} created successfully!`))
+      console.log(chalk.green(`\n✓ ${name} created successfully!`))
       if (url) console.log(chalk.gray(`URL: ${url}\n`))
+    } else {
+      console.log(chalk.red(`\n✗ Project creation failed.\n`))
     }
   } catch (err) {
     buildingSet.delete(name)
     console.error(chalk.red(`\nCreation failed: ${err.message}\n`))
   }
 
-  return showMainMenu(false)
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  return showMainMenu()
 }
 
 async function showStatus() {
@@ -474,6 +503,185 @@ async function showContainers() {
 
   await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
   return showMainMenu()
+}
+
+async function showCodeServer() {
+  try {
+    console.log(chalk.cyan('\nStarting Code-Server...\n'))
+    const result = await ensureCodeServer()
+    if (!result.success) {
+      console.log(chalk.red(`\n✗ ${result.message}\n`))
+    } else {
+      const url = getCodeServerBaseUrl()
+      console.log(chalk.green(`✓ Code-Server running`))
+      console.log(`  URL:      ${url}`)
+      console.log(`  Password: ${config.codeServerPassword}\n`)
+    }
+  } catch (err) {
+    console.log(chalk.red(`\nError: ${err.message}\n`))
+  }
+
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  return showMainMenu()
+}
+
+async function showClaudeUsage() {
+  const text = getUsageText()
+    .replace(/\*/g, '')
+    .replace(/`/g, '')
+    .replace(/_/g, '')
+  console.log(`\n${text}\n`)
+
+  await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back to menu'] }])
+  return showMainMenu()
+}
+
+async function openProjectCodeServer(name) {
+  try {
+    const result = await ensureCodeServer()
+    if (!result.success) {
+      console.log(chalk.red(`\n✗ ${result.message}\n`))
+      return
+    }
+    const url = getCodeServerUrl(name)
+    console.log(chalk.green(`\n✓ Code-Server ready`))
+    console.log(`  URL:      ${url}`)
+    console.log(`  Password: ${config.codeServerPassword}\n`)
+  } catch (err) {
+    console.log(chalk.red(`\nError: ${err.message}\n`))
+  }
+}
+
+async function showGitMenu(name) {
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: `Git: ${name}`,
+    loop: false,
+    choices: [
+      { name: 'Status', value: 'status' },
+      { name: 'Push', value: 'push' },
+      { name: 'Pull', value: 'pull' },
+      { name: 'Commit', value: 'commit' },
+      { name: 'Init Repository', value: 'init' },
+      new inquirer.Separator(),
+      { name: 'Back', value: 'back' },
+    ],
+  }])
+
+  if (action === 'back') return
+
+  if (action === 'status') {
+    try {
+      const result = await gitStatus(name)
+      const plain = result.replace(/\*/g, '').replace(/`/g, '')
+      console.log(`\n${plain}\n`)
+    } catch (err) {
+      if (err.message === 'INIT_REPO_NEEDED') {
+        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
+      } else {
+        console.log(chalk.red(`\nError: ${err.message}\n`))
+      }
+    }
+    return showGitMenu(name)
+  }
+
+  if (action === 'push') {
+    try {
+      console.log(chalk.cyan('\nPushing...\n'))
+      const result = await gitPush(name)
+      const plain = result.replace(/\*/g, '').replace(/`/g, '')
+      console.log(`${plain}\n`)
+    } catch (err) {
+      if (err.message === 'INIT_REPO_NEEDED') {
+        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
+      } else {
+        console.log(chalk.red(`\nError: ${err.message}\n`))
+      }
+    }
+    return showGitMenu(name)
+  }
+
+  if (action === 'pull') {
+    try {
+      console.log(chalk.cyan('\nPulling...\n'))
+      const result = await gitPull(name)
+      const plain = result.replace(/\*/g, '').replace(/`/g, '')
+      console.log(`${plain}\n`)
+    } catch (err) {
+      if (err.message === 'INIT_REPO_NEEDED') {
+        console.log(chalk.yellow('\n⚠ Not a Git repository. Use "Init Repository" first.\n'))
+      } else {
+        console.log(chalk.red(`\nError: ${err.message}\n`))
+      }
+    }
+    return showGitMenu(name)
+  }
+
+  if (action === 'commit') {
+    const { message } = await inquirer.prompt([{
+      type: 'input',
+      name: 'message',
+      message: 'Commit message:',
+      validate: (input) => input ? true : 'Message is required',
+    }])
+    try {
+      const result = await gitCommit(name, message)
+      console.log(chalk.green(`\n${result}\n`))
+    } catch (err) {
+      console.log(chalk.red(`\nError: ${err.message}\n`))
+    }
+    return showGitMenu(name)
+  }
+
+  if (action === 'init') {
+    const { gitUrl } = await inquirer.prompt([{
+      type: 'input',
+      name: 'gitUrl',
+      message: 'Remote URL (leave empty for local only):',
+    }])
+    try {
+      await initGitRepo(name, gitUrl || null)
+      console.log(chalk.green(`\n✓ Git repository initialized${gitUrl ? ` (remote: ${gitUrl})` : ''}\n`))
+    } catch (err) {
+      console.log(chalk.red(`\nError: ${err.message}\n`))
+    }
+    return showGitMenu(name)
+  }
+}
+
+async function deleteProject(name) {
+  const { confirm } = await inquirer.prompt([{
+    type: 'list',
+    name: 'confirm',
+    message: `Delete "${name}"? This removes the container, image, and all files.`,
+    loop: false,
+    choices: [
+      { name: 'Yes, delete', value: true },
+      { name: 'Cancel', value: false },
+    ],
+  }])
+
+  if (!confirm) return
+
+  try {
+    const dir = join(config.projectsDir, name)
+
+    // Stop and remove containers
+    try {
+      execSync(`docker compose down --rmi local`, { cwd: dir, stdio: 'ignore' })
+    } catch {}
+
+    // Remove directory
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+
+    store.delete(name)
+    console.log(chalk.green(`\n✓ "${name}" deleted.\n`))
+  } catch (err) {
+    console.log(chalk.red(`\nError deleting project: ${err.message}\n`))
+  }
 }
 
 async function showConfig() {
@@ -875,9 +1083,9 @@ async function configurePassword() {
   // Restart code-server service
   try {
     execSync('systemctl restart code-server', { stdio: 'ignore' })
-    console.log(chalk.green('\n✓ Password updated and code-server restarted.\n'))
+    console.log(chalk.green(`\n✓ Password updated and code-server restarted. New password: ${password}\n`))
   } catch {
-    console.log(chalk.green('\n✓ Password updated.'))
+    console.log(chalk.green(`\n✓ Password updated. New password: ${password}`))
     console.log(chalk.yellow('⚠ Could not restart code-server. Run: systemctl restart code-server\n'))
   }
   return showConfig()

@@ -23,7 +23,33 @@ The installer automatically:
 3. **Docker** builds and deploys as an isolated container
 4. **Caddy** exposes it with SSL on `{app}.yourdomain.com`
 
-Everything managed from an interactive CLI menu or Telegram bot.
+Everything managed from an interactive CLI menu or Telegram bot — both interfaces offer the same capabilities.
+
+## Feature Comparison
+
+Both the CLI and Telegram bot share the same core features. The only difference is that **Configuration** is CLI-only (server-side settings).
+
+| Feature | CLI | Telegram | Description |
+|---------|:---:|:--------:|-------------|
+| **View Projects** | ✅ | ✅ | List all deployed projects |
+| **Create New Project** | ✅ | ✅ | AI-generated app from description |
+| **Server Status** | ✅ | ✅ | CPU, RAM, disk usage |
+| **Docker Containers** | ✅ | ✅ | List all containers with status |
+| **Code-Server (IDE)** | ✅ | ✅ | Open VS Code in browser |
+| **Claude Usage** | ✅ | ✅ | API call stats and limits |
+| **Configuration** | ✅ | — | Domain, Telegram, Claude, password |
+
+### Per-Project Actions
+
+| Action | CLI | Telegram | Description |
+|--------|:---:|:--------:|-------------|
+| **View Logs** | ✅ | ✅ | Container stdout/stderr |
+| **Start / Stop** | ✅ | ✅ | Toggle container |
+| **Rebuild** | ✅ | ✅ | Patch or full rebuild with AI |
+| **Code-Server** | ✅ | ✅ | Open project folder in IDE |
+| **Git** | ✅ | ✅ | Status, push, pull, commit, init |
+| **Copy URL** | ✅ | ✅ | Project URL |
+| **Delete** | ✅ | ✅ | Remove container, image, and files |
 
 ## CLI Dashboard
 
@@ -33,12 +59,42 @@ Everything managed from an interactive CLI menu or Telegram bot.
   Create New Project
   Server Status
   Docker Containers
+  Code-Server (IDE)
+  Claude Usage
   ─────────────────
   Configuration
   Exit
 ```
 
-### Configuration Menu
+### Project Menu (CLI)
+
+```
+? Project: my-app
+❯ View Logs
+  Stop
+  Rebuild
+  Code-Server (IDE)
+  Git
+  Copy URL
+  ─────────────────
+  Delete Project
+  Back
+```
+
+### Git Submenu (CLI)
+
+```
+? Git: my-app
+❯ Status
+  Push
+  Pull
+  Commit
+  Init Repository
+  ─────────────────
+  Back
+```
+
+### Configuration Menu (CLI only)
 
 All settings configurable from the CLI — no need to edit files:
 
@@ -57,6 +113,7 @@ Current Configuration:
   Set Telegram Bot           ← auto-detect Chat ID
   🟢 Telegram Bot (running)  ← start/stop/restart
   Change Code-Server Password
+  View System Logs
 ```
 
 ### Create New Project
@@ -77,6 +134,70 @@ Before creating, the CLI checks:
 - Is Claude Code installed? → offers to install
 - Is Claude Code logged in? → launches `claude login` for OAuth
 
+## Telegram Bot
+
+### Main Menu
+
+```
+👾 VPS Bot
+
+📊 Estado    📦 Containers
+🚀 Mis proyectos
+➕ Nuevo proyecto
+💻 Code-Server    ⚡ Claude Usage
+```
+
+### Project Menu (Telegram)
+
+```
+📦 my-app  🟢
+
+♻️ Rebuild    📋 Logs
+💻 Code-Server    🔗 Copiar URL
+⚙️ Git    🗑️ Eliminar
+▶️ Start / 🛑 Stop    ⬅️ Lista
+```
+
+### Git Menu (Telegram)
+
+```
+🔧 Git - my-app
+
+📤 Push    📥 Pull
+📊 Status
+⚙️ Inicializar Repo
+💬 Commit Personalizado
+⬅️ Volver
+```
+
+### Text Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start`, `/menu` | Main menu |
+| `/new <name> <description>` | Create project |
+| `/rebuild <name>` | Rebuild project |
+| `/list` | List projects |
+| `/status` | Server status |
+| `/ps` | Docker containers |
+| `/logs <name>` | Container logs |
+| `/start <name>` | Start container |
+| `/stop <name>` | Stop container |
+| `/restart <name>` | Restart container |
+| `/url <name>` | Get project URL |
+| `/delete <name>` | Delete project |
+
+### Setup (from CLI)
+
+From **Configuration → Set Telegram Bot**:
+
+1. Instructions to create bot via `@BotFather`
+2. Enter bot token
+3. **Auto-detect Chat ID** — send a message to your bot, select auto-detect
+4. Start bot as systemd service (background)
+
+Manage from **🟢 Telegram Bot** → Start / Stop / Restart
+
 ## Domain + SSL Setup
 
 From **Configuration → Set Custom Domain**:
@@ -94,17 +215,6 @@ From **Configuration → Set Custom Domain**:
 6. SSL certificates auto-managed by Let's Encrypt
 
 Leave domain empty to switch back to IP mode.
-
-## Telegram Bot
-
-From **Configuration → Set Telegram Bot**:
-
-1. Instructions to create bot via `@BotFather`
-2. Enter bot token
-3. **Auto-detect Chat ID** — send a message to your bot, select auto-detect
-4. Start bot as systemd service (background)
-
-Manage from **🟢 Telegram Bot** → Start / Stop / Restart
 
 ## Architecture
 
@@ -160,17 +270,23 @@ npm start --prefix /root/vps-bot
 │   ├── commands/
 │   │   ├── projects.js         # Claude Code (→ vpsbot) + Docker deploy
 │   │   ├── docker.js           # Container management
-│   │   └── menu.js             # Telegram UI
+│   │   ├── git.js              # Git operations
+│   │   ├── menu.js             # Telegram UI
+│   │   └── status.js           # Server status
 │   └── lib/
 │       ├── config.js           # Environment config
-│       ├── docker-client.js
+│       ├── code-server.js      # Code-Server management
+│       ├── docker-client.js    # Docker client
 │       ├── store.js            # Project state (JSON)
+│       ├── usage.js            # Claude usage tracking
+│       ├── logger.js           # Logging
+│       ├── branding.js         # ASCII banner
 │       └── caddy.js            # Caddy Admin API
 ├── install.sh                  # One-command installer
 ├── bootstrap.sh                # Remote installer
 └── .env                        # Configuration (auto-generated)
 
-/root/vps-code-bot-projects/        # Generated apps (owned by vpsbot)
+/home/vpsbot/projects/              # Generated apps (owned by vpsbot)
 ├── my-app/
 │   ├── src/index.js
 │   ├── Dockerfile

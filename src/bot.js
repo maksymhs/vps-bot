@@ -313,6 +313,38 @@ bot.action('status', async (ctx) => {
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
   })
 })
+bot.action('codeserver', async (ctx) => {
+  await answer(ctx)
+  const { Markup } = await import('telegraf')
+  try {
+    const result = await ensureCodeServer()
+    if (!result.success) {
+      await ctx.editMessageText(`❌ ${result.message}`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+      })
+      return
+    }
+    const url = getCodeServerUrl('')
+    const baseUrl = result.url
+    const pass = config.codeServerPassword
+    await ctx.editMessageText(
+      `💻 *Code-Server*\n\n🔗 \`${baseUrl}\`\n🔑 Pass: \`${pass}\`\n\n_Haz clic para abrir VS Code en el navegador_`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.url('🌐 Abrir Code-Server', baseUrl)],
+          [Markup.button.callback('⬅️ Menú', 'main')],
+        ]),
+      }
+    )
+  } catch (err) {
+    await ctx.editMessageText(`❌ Error: ${err.message}`, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+    })
+  }
+})
 bot.action('ps', async (ctx) => {
   await answer(ctx)
   const { Markup } = await import('telegraf')
