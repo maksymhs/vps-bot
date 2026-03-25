@@ -54,7 +54,6 @@ export async function showConfig(nav) {
       { name: 'Configure Claude Code', value: 'claude' },
       { name: 'Set Custom Domain', value: 'domain' },
       { name: 'Set Telegram Bot', value: 'telegram' },
-      ...(process.env.BOT_TOKEN ? [{ name: `${botRunning ? '🟢' : '🔴'} Telegram Bot (${botRunning ? 'running' : 'stopped'})`, value: 'bot' }] : []),
       { name: 'Change Code-Server Password', value: 'password' },
       { name: `Auto-sleep (${config.idleTimeout > 0 ? config.idleTimeout + 'm' : 'off'})`, value: 'idle' },
       new inquirer.Separator(),
@@ -67,7 +66,6 @@ export async function showConfig(nav) {
   if (action === 'claude') return configureClaude(nav)
   if (action === 'domain') return configureDomain(nav)
   if (action === 'telegram') return configureTelegram(nav)
-  if (action === 'bot') return manageTelegramBot(nav)
   if (action === 'password') return configurePassword(nav)
   if (action === 'idle') return configureIdleTimeout(nav)
   if (action === 'logs') return nav.systemLogs()
@@ -147,6 +145,19 @@ async function configureClaude(nav) {
 async function configureDomain(nav) {
   console.clear()
   console.log(chalk.cyan('\n  Domain Setup\n'))
+
+  let serverIp = config.ipAddress || 'localhost'
+  try {
+    serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
+  } catch {}
+
+  console.log(chalk.white('  Before entering your domain, add this DNS record:\n'))
+  console.log(`    ${chalk.bold('Type')}   ${chalk.bold('Name')}              ${chalk.bold('Value')}`)
+  console.log(`    A      *.yourdomain.com    ${serverIp}`)
+  console.log()
+  console.log(chalk.gray('  This wildcard record routes all subdomains (apps, code-server)'))
+  console.log(chalk.gray('  to this server. DNS propagation may take a few minutes.\n'))
+
   const { domain } = await inquirer.prompt([{
     type: 'input',
     name: 'domain',
@@ -155,12 +166,7 @@ async function configureDomain(nav) {
   }])
 
   if (domain) {
-    let serverIp = config.ipAddress || 'localhost'
-    try {
-      serverIp = execSync("hostname -I 2>/dev/null | awk '{print $1}' || curl -sf ifconfig.me 2>/dev/null || echo ''", { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim()
-    } catch {}
-
-    console.log(chalk.cyan('\n  Verifying DNS\n'))
+    console.log(chalk.cyan('\n  Verifying DNS...\n'))
     const dns = await import('dns')
     const { promisify } = await import('util')
     const resolve4 = promisify(dns.resolve4)
@@ -184,16 +190,27 @@ async function configureDomain(nav) {
     }
 
     if (!dnsOk) {
-      console.log(chalk.red(`\n✗ DNS does not point to this server (${serverIp}).\n`))
-      console.log(chalk.yellow(`  Add this DNS record first:\n`))
-      console.log(`    ${chalk.bold('A')}  *.${domain}      → ${serverIp}`)
-      console.log()
-      console.log(chalk.gray(`  DNS propagation can take a few minutes. Try again after updating.\n`))
-      await inquirer.prompt([{ type: 'list', name: 'back', message: '', loop: false, choices: ['← Back'] }])
+      console.log(chalk.red(`\n  ✗ DNS does not point to this server (${serverIp}).`))
+      console.log(chalk.yellow(`\n  Required DNS record:`))
+      console.log(`\n    ${chalk.bold('A')}  *.${domain}  →  ${serverIp}\n`)
+      console.log(chalk.gray('  DNS propagation can take a few minutes.'))
+      console.log(chalk.gray('  Verify your DNS provider settings and try again.\n'))
+
+      const { retry } = await inquirer.prompt([{
+        type: 'list',
+        name: 'retry',
+        message: 'What to do?',
+        loop: false,
+        choices: [
+          { name: 'Retry DNS check', value: 'retry' },
+          { name: 'Back to config', value: 'back' },
+        ],
+      }])
+      if (retry === 'retry') return configureDomain(nav)
       return showConfig(nav)
     }
 
-    console.log(chalk.green(`\n✓ DNS verified — ${domain} points to ${serverIp}\n`))
+    console.log(chalk.green(`\n✓ DNS verified — *.${domain} → ${serverIp}\n`))
 
     updateEnvVar('DOMAIN', domain)
     updateEnvVar('IP_ADDRESS', '', true)
@@ -270,10 +287,56 @@ async function configureDomain(nav) {
 async function configureTelegram(nav) {
   console.clear()
   console.log(chalk.cyan('\n  Telegram Bot\n'))
+
+  // Show current bot status if configured
+  if (process.env.BOT_TOKEN) {
+    let botRunning = false
+    try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); botRunning = true } catch {}
+    const statusIcon = botRunning ? '🟢' : '🔴'
+    const statusText = botRunning ? chalk.green('running') : chalk.red('stopped')
+    console.log(`  Status: ${statusIcon} ${statusText}`)
+    console.log(`  Token:  ${chalk.gray(process.env.BOT_TOKEN.slice(0, 10) + '...')}`)
+    if (process.env.CHAT_ID) console.log(`  Chat:   ${chalk.gray(process.env.CHAT_ID)}`)
+    console.log()
+  }
+
   console.log(chalk.gray('  1. Open Telegram and talk to @BotFather'))
   console.log(chalk.gray('  2. Send /newbot and follow the steps'))
   console.log(chalk.gray('  3. Copy the Bot Token\n'))
 
+  const choices = [
+    { name: 'Set Bot Token', value: 'token' },
+  ]
+  if (process.env.BOT_TOKEN) {
+    let botRunning = false
+    try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); botRunning = true } catch {}
+    choices.push(
+      new inquirer.Separator(),
+      ...(botRunning
+        ? [
+            { name: 'Stop bot', value: 'stop' },
+            { name: 'Restart bot', value: 'restart' },
+          ]
+        : [{ name: 'Start bot', value: 'start_bot' }]
+      ),
+    )
+  }
+  choices.push(new inquirer.Separator(), { name: 'Back', value: 'back' })
+
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: 'Telegram:',
+    loop: false,
+    choices,
+  }])
+
+  if (action === 'back') return showConfig(nav)
+  if (action === 'start_bot') { startBotBackground(); return configureTelegram(nav) }
+  if (action === 'stop') { stopBot(); return configureTelegram(nav) }
+  if (action === 'restart') { stopBot(); startBotBackground(); return configureTelegram(nav) }
+
+  // action === 'token'
   const { token } = await inquirer.prompt([{
     type: 'input',
     name: 'token',
@@ -308,6 +371,7 @@ async function configureTelegram(nav) {
 
   if (method === 'auto') {
     console.log(chalk.yellow('\nFetching latest messages from bot...\n'))
+    let detected = false
     try {
       const result = execSync(`curl -sf "https://api.telegram.org/bot${token}/getUpdates" 2>/dev/null`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString()
       const data = JSON.parse(result)
@@ -316,15 +380,40 @@ async function configureTelegram(nav) {
         const chatId = lastMsg.message?.chat?.id || lastMsg.my_chat_member?.chat?.id
         if (chatId) {
           const chatName = lastMsg.message?.chat?.first_name || lastMsg.my_chat_member?.chat?.first_name || ''
-          console.log(chalk.green(`✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
+          console.log(chalk.green(`  ✓ Found Chat ID: ${chatId} ${chatName ? `(${chatName})` : ''}\n`))
           updateEnvVar('CHAT_ID', chatId.toString())
-          console.log(chalk.green('✓ Telegram configured!\n'))
-          return offerStartBot(nav)
+          console.log(chalk.green('  ✓ Telegram configured!\n'))
+          detected = true
         }
       }
-      console.log(chalk.yellow('No messages found. Send a message to your bot first and try again.\n'))
+      if (!detected) {
+        console.log(chalk.yellow('  No messages found. Send a message to your bot first.\n'))
+      }
     } catch {
-      console.log(chalk.red('Could not reach Telegram API. Check your token.\n'))
+      console.log(chalk.red('  Could not reach Telegram API. Check your token.\n'))
+    }
+
+    const { retry } = await inquirer.prompt([{
+      type: 'list',
+      name: 'retry',
+      message: detected ? 'Next:' : 'What to do?',
+      loop: false,
+      choices: [
+        ...(detected
+          ? [{ name: 'Start bot now', value: 'start' }]
+          : [{ name: 'Retry detection', value: 'retry' }]
+        ),
+        { name: 'Back to config', value: 'back' },
+      ],
+    }])
+
+    if (retry === 'retry') {
+      // Re-enter auto-detect: go back to configureTelegram but skip token prompt
+      // Simpler: just re-run the auto-detect part
+      return configureTelegram(nav)
+    }
+    if (retry === 'start') {
+      startBotBackground()
     }
     return showConfig(nav)
   }
@@ -378,39 +467,6 @@ function stopBot() {
   } catch {
     console.log(chalk.gray('\nBot was not running.\n'))
   }
-}
-
-async function manageTelegramBot(nav) {
-  console.clear()
-  console.log(chalk.cyan('\n  Telegram Bot\n'))
-  let running = false
-  try { execSync('systemctl is-active --quiet vps-bot-telegram', { stdio: 'ignore' }); running = true } catch {}
-
-  const choices = running
-    ? [
-        { name: 'Stop bot', value: 'stop' },
-        { name: 'Restart bot', value: 'restart' },
-      ]
-    : [
-        { name: 'Start bot', value: 'start' },
-      ]
-
-  const { action } = await inquirer.prompt([{
-    type: 'list',
-    name: 'action',
-    message: `Telegram bot is ${running ? chalk.green('running') : chalk.red('stopped')}:`,
-    loop: false,
-    choices: [...choices, new inquirer.Separator(), { name: 'Back', value: 'back' }],
-  }])
-
-  if (action === 'back') return showConfig(nav)
-  if (action === 'start') startBotBackground()
-  if (action === 'stop') stopBot()
-  if (action === 'restart') {
-    stopBot()
-    startBotBackground()
-  }
-  return showConfig(nav)
 }
 
 // ── Password ─────────────────────────────────────────────────────────────────
