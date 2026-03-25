@@ -17,6 +17,32 @@ let checkInterval = null
 let wakeServer = null
 
 /**
+ * Reconcile store sleeping flags with actual Docker state.
+ * After a VPS reboot, Docker may restart containers that were stopped by
+ * the sleep manager (restart: unless-stopped). This clears stale sleeping flags.
+ */
+export async function reconcileSleepState() {
+  try {
+    const running = await getDocker().listContainers({
+      filters: JSON.stringify({ status: ['running'] }),
+    })
+    const runningNames = new Set(
+      running.map(c => c.Names[0].replace('/', '').replace(/-app$/, ''))
+    )
+
+    const projects = store.getAll()
+    for (const [name, project] of Object.entries(projects)) {
+      if (project.sleeping && runningNames.has(name)) {
+        store.set(name, { sleeping: false })
+        log.info(`[sleep] Reconciled: ${name} is running, cleared sleeping flag`)
+      }
+    }
+  } catch (err) {
+    log.error('[sleep] Reconcile failed', err.message)
+  }
+}
+
+/**
  * Start the sleep manager: periodic idle check + wake proxy
  */
 export function startSleepManager() {

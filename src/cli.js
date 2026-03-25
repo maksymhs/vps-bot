@@ -10,6 +10,7 @@ import { printHeader } from './cli/ui.js'
 import { showStatus, showContainers, showCodeServer, showClaudeUsage, showSystemLogs } from './cli/screens.js'
 import { showConfig } from './cli/config-screens.js'
 import { showProjects, showNewProject } from './cli/project-screens.js'
+import { reconcileSleepState } from './lib/sleep-manager.js'
 
 // Navigation object passed to all screens to avoid circular imports
 const nav = {
@@ -60,6 +61,7 @@ async function main() {
     console.log(chalk.red('\nSystem not configured.\nRun: npm run setup\n'))
     process.exit(1)
   }
+  reconcileSleepState().catch(() => {})
   await showMainMenu()
 }
 

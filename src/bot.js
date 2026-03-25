@@ -13,7 +13,7 @@ import { buildingSet } from './lib/build-state.js'
 import { config } from './lib/config.js'
 import { getBanner } from './lib/branding.js'
 import { getCodeServerUrl, ensureCodeServer } from './lib/code-server.js'
-import { startSleepManager, stopSleepManager } from './lib/sleep-manager.js'
+import { startSleepManager, stopSleepManager, reconcileSleepState } from './lib/sleep-manager.js'
 import { existsSync, rmSync } from 'fs'
 import chalk from 'chalk'
 
@@ -591,6 +591,7 @@ bot.catch((err, ctx) => {
 })
 
 bot.launch()
+reconcileSleepState().catch(err => console.error('Reconcile error:', err.message))
 startSleepManager()
 console.log(getBanner())
 console.log(chalk.green('Bot started successfully.\n'))
