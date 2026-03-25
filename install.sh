@@ -114,14 +114,12 @@ run_silent_sh() {
 }
 
 echo ""
-echo -e "${CYAN}${BOLD}                  __          __  ${NC}"
-echo -e "${CYAN}${BOLD}   _   ___ ___   / /_  ____  / /_ ${NC}"
-echo -e "${CYAN}${BOLD}  | | / / __ \\ / __ \\/ __ \\/ __/ ${NC}"
-echo -e "${CYAN}${BOLD}  | |/ / /_/ // /_/ / /_/ / /_   ${NC}"
-echo -e "${CYAN}${BOLD}  |___/ .___//_____/\\____/\\__/   ${NC}"
-echo -e "${CYAN}${BOLD}     /_/                          ${NC}"
-echo ""
-echo -e "  ${DIM}Describe it. Deploy it.${NC}"
+echo -e "${CYAN}${BOLD}                       __          __ ${NC}"
+echo -e "${CYAN}${BOLD}  _   ______  _____   / /_  ____  / /_${NC}"
+echo -e "${CYAN}${BOLD}  | | / / __ \\/ ___/  / __ \\/ __ \\/ __/${NC}"
+echo -e "${CYAN}${BOLD}  | |/ / /_/ (__  )  / /_/ / /_/ / /_ ${NC}"
+echo -e "${CYAN}${BOLD}  |___/ .___/____/  /_.___/\\____/\\__/ ${NC}"
+echo -e "${CYAN}${BOLD}     /_/          ${NC}${DIM}by maksymhs${NC}"
 echo ""
 
 # Detect OS
