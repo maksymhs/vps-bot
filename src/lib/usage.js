@@ -66,7 +66,7 @@ export function getUsageStats() {
     limitsPerDay: LIMITS.perDay,
     tokens: usage.tokens,
     hoursUntilReset,
-    resetTime: resetTime.toLocaleString('es-ES'),
+    resetTime: resetTime.toLocaleString('en-US'),
   }
 }
 

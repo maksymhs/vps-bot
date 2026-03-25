@@ -38,8 +38,8 @@ async function sendProjectMenu(ctx, name) {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-      [toggleBtn, Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-      [Markup.button.callback('🗑️ Eliminar', `del:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+      [toggleBtn, Markup.button.callback('🔗 Copy URL', `url:${name}`)],
+      [Markup.button.callback('🗑️ Delete', `del:${name}`), Markup.button.callback('⬅️ List', 'list')],
     ]),
   })
 }
@@ -47,7 +47,7 @@ async function sendProjectMenu(ctx, name) {
 // ── Auth middleware ────────────────────────────────────────────────────────
 
 bot.use((ctx, next) => {
-  if (ctx.chat?.id !== ALLOWED_CHAT_ID) return ctx.reply('⛔ No autorizado')
+  if (ctx.chat?.id !== ALLOWED_CHAT_ID) return ctx.reply('⛔ Unauthorized')
   return next()
 })
 
@@ -76,11 +76,11 @@ bot.on('text', async (ctx, next) => {
   if (rebuildState && rebuildState.step === 'text') {
     const { name, mode } = rebuildState
     const project = store.get(name)
-    if (!project) { pendingRebuild.delete(ctx.chat.id); return ctx.reply(`Proyecto "${name}" no encontrado.`) }
+    if (!project) { pendingRebuild.delete(ctx.chat.id); return ctx.reply(`Project "${name}" not found.`) }
 
     const input = ctx.message.text.trim()
     const description = mode === 'patch'
-      ? `${project.description}\n\nCambios solicitados: ${input}`
+      ? `${project.description}\n\nRequested changes: ${input}`
       : input
 
     pendingRebuild.set(ctx.chat.id, { name, mode, description, step: 'model' })
@@ -95,12 +95,11 @@ bot.on('text', async (ctx, next) => {
 
     if (gitUrl.toLowerCase() === 'skip') {
       pendingGitInit.delete(ctx.chat.id)
-      await ctx.reply(`⏭️ Inicialización sin URL remota`)
+      await ctx.reply(`⏭️ Initializing without remote URL`)
       const finalGitUrl = null
     } else {
-      // Validar que sea una URL válida
       if (!gitUrl.startsWith('http')) {
-        return ctx.reply('❌ URL inválida. Debe comenzar con http:// o https://')
+        return ctx.reply('❌ Invalid URL. Must start with http:// or https://')
       }
       var finalGitUrl = gitUrl
     }
@@ -108,12 +107,12 @@ bot.on('text', async (ctx, next) => {
     pendingGitInit.delete(ctx.chat.id)
 
     try {
-      await ctx.reply(`⚙️ Inicializando repositorio Git...`)
+      await ctx.reply(`⚙️ Initializing Git repository...`)
       await initGitRepo(name, finalGitUrl)
-      await ctx.reply(`✅ Repositorio inicializado correctamente${finalGitUrl ? `\n🔗 Remote: \`${finalGitUrl}\`` : ''}`, { parse_mode: 'Markdown' })
+      await ctx.reply(`✅ Repository initialized${finalGitUrl ? `\n🔗 Remote: \`${finalGitUrl}\`` : ''}`, { parse_mode: 'Markdown' })
       return
     } catch (err) {
-      await ctx.reply(`❌ Error inicializando Git: ${err.message}`, { parse_mode: 'Markdown' })
+      await ctx.reply(`❌ Git init error: ${err.message}`, { parse_mode: 'Markdown' })
       return
     }
   }
@@ -127,12 +126,12 @@ bot.on('text', async (ctx, next) => {
     pendingGitCommit.delete(ctx.chat.id)
 
     try {
-      await ctx.reply(`💬 Creando commit...`)
+      await ctx.reply(`💬 Creating commit...`)
       const result = await gitCommit(name, message)
       await ctx.reply(result, { parse_mode: 'Markdown' })
       return
     } catch (err) {
-      await ctx.reply(`❌ Error en commit: ${err.message}`, { parse_mode: 'Markdown' })
+      await ctx.reply(`❌ Commit error: ${err.message}`, { parse_mode: 'Markdown' })
       return
     }
   }
@@ -142,12 +141,12 @@ bot.on('text', async (ctx, next) => {
 
   if (state.step === 'name') {
     const name = ctx.message.text.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    if (!name) return ctx.reply('Nombre inválido. Solo letras, números y guiones.')
+    if (!name) return ctx.reply('Invalid name. Only letters, numbers, and hyphens.')
     if (store.get(name)) {
-      return ctx.reply(`Ya existe "${name}". Escribe otro nombre o /menu para cancelar.`)
+      return ctx.reply(`"${name}" already exists. Pick another name or /menu to cancel.`)
     }
     pendingNew.set(ctx.chat.id, { step: 'desc', name })
-    return ctx.reply(`✅ Nombre: *${name}*\n\n¿Descripción del proyecto?`, { parse_mode: 'Markdown' })
+    return ctx.reply(`✅ Name: *${name}*\n\nDescribe what the app should do:`, { parse_mode: 'Markdown' })
   }
 
   if (state.step === 'desc') {
@@ -172,9 +171,9 @@ bot.action('usage', async (ctx) => {
   await answer(ctx)
   const { Markup } = await import('telegraf')
   const text = getUsageText()
-  await ctx.editMessageText(text + '\n\n⬅️ _Vuelve al menú_', {
+  await ctx.editMessageText(text + '\n\n⬅️ _Back to menu_', {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menu', 'main')]]),
   })
 })
 
@@ -183,18 +182,18 @@ bot.action(/^gp:(.+)$/, async (ctx) => {
   await answer(ctx)
   const { Markup } = await import('telegraf')
   const name = ctx.match[1]
-  await ctx.editMessageText(`📤 *Push en progreso...*`, { parse_mode: 'Markdown' })
+  await ctx.editMessageText(`📤 *Pushing...*`, { parse_mode: 'Markdown' })
   try {
     const result = await gitPush(name)
-    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+    await ctx.editMessageText(`${result}\n\n⬅️ _Back to project_`, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Back', `p:${name}`)]])
     })
   } catch (err) {
     if (err.message === 'INIT_REPO_NEEDED') {
-      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+      await ctx.editMessageText(`⚠️ *Repository not initialized*\n\nInitialize Git?`, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Initialize', `git_init:${name}`)]])
       })
     } else {
       await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
@@ -206,18 +205,18 @@ bot.action(/^gpl:(.+)$/, async (ctx) => {
   await answer(ctx)
   const { Markup } = await import('telegraf')
   const name = ctx.match[1]
-  await ctx.editMessageText(`📥 *Pull en progreso...*`, { parse_mode: 'Markdown' })
+  await ctx.editMessageText(`📥 *Pulling...*`, { parse_mode: 'Markdown' })
   try {
     const result = await gitPull(name)
-    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+    await ctx.editMessageText(`${result}\n\n⬅️ _Back to project_`, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Back', `p:${name}`)]])
     })
   } catch (err) {
     if (err.message === 'INIT_REPO_NEEDED') {
-      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+      await ctx.editMessageText(`⚠️ *Repository not initialized*\n\nInitialize Git?`, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Initialize', `git_init:${name}`)]])
       })
     } else {
       await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
@@ -231,15 +230,15 @@ bot.action(/^gs:(.+)$/, async (ctx) => {
   const name = ctx.match[1]
   try {
     const result = await gitStatus(name)
-    await ctx.editMessageText(`${result}\n\n⬅️ _Vuelve al proyecto_`, {
+    await ctx.editMessageText(`${result}\n\n⬅️ _Back to project_`, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Volver', `p:${name}`)]])
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Back', `p:${name}`)]])
     })
   } catch (err) {
     if (err.message === 'INIT_REPO_NEEDED') {
-      await ctx.editMessageText(`⚠️ *Repositorio no inicializado*\n\n¿Quieres inicializar Git?`, {
+      await ctx.editMessageText(`⚠️ *Repository not initialized*\n\nInitialize Git?`, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Inicializar', `git_init:${name}`)]])
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Initialize', `git_init:${name}`)]])
       })
     } else {
       await ctx.editMessageText(`❌ Error: ${err.message.slice(0, 200)}`, { parse_mode: 'Markdown' })
@@ -253,16 +252,16 @@ bot.action(/^git_menu:(.+)$/, async (ctx) => {
   await showGitMenu(ctx, ctx.match[1])
 })
 
-// Inicializar repositorio
+// Initialize repository
 bot.action(/^git_init:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   const { Markup } = await import('telegraf')
-  await ctx.editMessageText(`🔧 *Inicializar Git Repo*\n\n¿Público o Privado?`, {
+  await ctx.editMessageText(`🔧 *Init Git Repo*\n\nPublic or Private?`, {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('🌍 Público', `git_pub:${name}`), Markup.button.callback('🔒 Privado', `git_priv:${name}`)],
-      [Markup.button.callback('⬅️ Volver', `git_menu:${name}`)],
+      [Markup.button.callback('🌍 Public', `git_pub:${name}`), Markup.button.callback('🔒 Private', `git_priv:${name}`)],
+      [Markup.button.callback('⬅️ Back', `git_menu:${name}`)],
     ]),
   })
 })
@@ -271,7 +270,7 @@ bot.action(/^git_pub:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   pendingGitInit.set(ctx.chat.id, { name, private: false })
-  await ctx.editMessageText(`📝 *Escribe URL del repo público*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
+  await ctx.editMessageText(`📝 *Enter public repo URL*\n\n_Or type "skip" to skip_\n\nExample: https://github.com/user/repo.git`, {
     parse_mode: 'Markdown'
   })
 })
@@ -280,17 +279,17 @@ bot.action(/^git_priv:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   pendingGitInit.set(ctx.chat.id, { name, private: true })
-  await ctx.editMessageText(`📝 *Escribe URL del repo privado*\n\n_O escribe "skip" para omitir_\n\nEjemplo: https://github.com/usuario/repo.git`, {
+  await ctx.editMessageText(`📝 *Enter private repo URL*\n\n_Or type "skip" to skip_\n\nExample: https://github.com/user/repo.git`, {
     parse_mode: 'Markdown'
   })
 })
 
-// Commit personalizado
+// Custom commit
 bot.action(/^git_commit:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
   pendingGitCommit.set(ctx.chat.id, { name, step: 'message' })
-  await ctx.editMessageText(`💬 *Escribe el mensaje de commit*\n\nEjemplo: "Agregar validación al formulario"`, {
+  await ctx.editMessageText(`💬 *Enter commit message*\n\nExample: "Add form validation"`, {
     parse_mode: 'Markdown'
   })
 })
@@ -305,13 +304,13 @@ bot.action('status', async (ctx) => {
   const pct = n => Math.round(n)
   const d = disk.find(d => d.mount === '/') || disk[0]
   const text =
-    `🖥 *Estado del servidor*\n\n` +
+    `🖥 *Server Status*\n\n` +
     `*CPU:* ${pct(cpu.currentLoad)}%\n` +
     `*RAM:* ${gb(mem.used)}GB / ${gb(mem.total)}GB (${pct(mem.used / mem.total * 100)}%)\n` +
-    `*Disco:* ${gb(d.used)}GB / ${gb(d.size)}GB (${pct(d.use)}%)`
+    `*Disk:* ${gb(d.used)}GB / ${gb(d.size)}GB (${pct(d.use)}%)`
   await ctx.editMessageText(text, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menu', 'main')]]),
   })
 })
 bot.action('codeserver', async (ctx) => {
@@ -322,7 +321,7 @@ bot.action('codeserver', async (ctx) => {
     if (!result.success) {
       await ctx.editMessageText(`❌ ${result.message}`, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menu', 'main')]]),
       })
       return
     }
@@ -330,19 +329,19 @@ bot.action('codeserver', async (ctx) => {
     const baseUrl = result.url
     const pass = config.codeServerPassword
     await ctx.editMessageText(
-      `💻 *Code-Server*\n\n🔗 \`${baseUrl}\`\n🔑 Pass: \`${pass}\`\n\n_Haz clic para abrir VS Code en el navegador_`,
+      `💻 *Code-Server*\n\n🔗 \`${baseUrl}\`\n🔑 Pass: \`${pass}\`\n\n_Click to open VS Code in the browser_`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.url('🌐 Abrir Code-Server', baseUrl)],
-          [Markup.button.callback('⬅️ Menú', 'main')],
+          [Markup.button.url('🌐 Open Code-Server', baseUrl)],
+          [Markup.button.callback('⬅️ Menu', 'main')],
         ]),
       }
     )
   } catch (err) {
     await ctx.editMessageText(`❌ Error: ${err.message}`, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menu', 'main')]]),
     })
   }
 })
@@ -356,10 +355,10 @@ bot.action('ps', async (ctx) => {
         const icon = c.State === 'running' ? '🟢' : '🔴'
         return `${icon} \`${n}\` — ${c.Status}`
       }).join('\n')
-    : 'No hay containers.'
+    : 'No containers found.'
   await ctx.editMessageText(lines, {
     parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menú', 'main')]]),
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Menu', 'main')]]),
   })
 })
 
@@ -376,8 +375,8 @@ bot.action(/^p:(.+)$/, async (ctx) => {
 bot.action(/^rb:(.+)$/, async (ctx) => {
   await answer(ctx)
   const name = ctx.match[1]
-  if (!store.get(name)) return ctx.editMessageText(`Proyecto "${name}" no encontrado.`)
-  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  if (!store.get(name)) return ctx.editMessageText(`Project "${name}" not found.`)
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Already building...', { show_alert: true })
   await startRebuildFlow(ctx, name)
 })
 
@@ -402,13 +401,13 @@ bot.action(/^lg:(.+)$/, async (ctx) => {
       all: true,
       filters: JSON.stringify({ name: [`${name}-app`] }),
     })
-    if (!containers.length) return ctx.editMessageText(`Container "${name}" no encontrado.`)
+    if (!containers.length) return ctx.editMessageText(`Container "${name}" not found.`)
     const stream = await getDocker().getContainer(containers[0].Id).logs({ stdout: true, stderr: true, tail: 40 })
-    const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).slice(-3500).trim() || '(sin logs)'
+    const text = (Buffer.isBuffer(stream) ? stream.toString() : String(stream)).slice(-3500).trim() || '(no logs)'
     await ctx.editMessageText(`\`\`\`\n${text}\n\`\`\``, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('🔄 Actualizar', `lg:${name}`), Markup.button.callback('⬅️ Proyecto', `p:${name}`)],
+        [Markup.button.callback('🔄 Refresh', `lg:${name}`), Markup.button.callback('⬅️ Project', `p:${name}`)],
       ]),
     })
   } catch (err) {
@@ -448,7 +447,7 @@ bot.action(/^go:(.+)$/, async (ctx) => {
 bot.action(/^url:(.+)$/, async (ctx) => {
   const name = ctx.match[1]
   const project = store.get(name)
-  await ctx.answerCbQuery(project ? project.url : 'No encontrado', { show_alert: true }).catch(() => {})
+  await ctx.answerCbQuery(project ? project.url : 'Not found', { show_alert: true }).catch(() => {})
 })
 
 // Code-Server
@@ -458,13 +457,13 @@ bot.action(/^cs:(.+)$/, async (ctx) => {
   const project = store.get(name)
 
   if (!project) {
-    await ctx.answerCbQuery('Proyecto no encontrado', { show_alert: true })
+    await ctx.answerCbQuery('Project not found', { show_alert: true })
     return
   }
 
   try {
     // Ensure global code-server is running
-    await ctx.editMessageText(`🚀 Verificando Code-Server...`, { parse_mode: 'Markdown' })
+    await ctx.editMessageText(`🚀 Starting Code-Server...`, { parse_mode: 'Markdown' })
     const result = await ensureCodeServer()
     if (!result.success) {
       await ctx.editMessageText(`❌ Error: ${result.message}`, { parse_mode: 'Markdown' })
@@ -475,17 +474,17 @@ bot.action(/^cs:(.+)$/, async (ctx) => {
     // Get project-specific URL (opens folder)
     const url = getCodeServerUrl(name)
 
-    const msg = `💻 *Code-Server - ${name}*\n\n🔗 \`${url}\`\n\n_Haz clic para abrir el proyecto en VS Code_`
+    const msg = `💻 *Code-Server - ${name}*\n\n🔗 \`${url}\`\n\n_Click to open the project in VS Code_`
     await ctx.editMessageText(msg, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.url('🌐 Abrir Code-Server', url)],
-        [Markup.button.callback('⬅️ Volver', `p:${name}`)],
+        [Markup.button.url('🌐 Open Code-Server', url)],
+        [Markup.button.callback('⬅️ Back', `p:${name}`)],
       ]),
     })
   } catch (err) {
     console.error('Code-Server error:', err)
-    await ctx.editMessageText(`❌ Error al acceder a Code-Server: ${err.message}`, { parse_mode: 'Markdown' })
+    await ctx.editMessageText(`❌ Code-Server error: ${err.message}`, { parse_mode: 'Markdown' })
     await showProject(ctx, name)
   }
 })
@@ -502,9 +501,9 @@ bot.action(/^del_ok:(.+)$/, async (ctx) => {
   const { Markup } = await import('telegraf')
   const name = ctx.match[1]
   const project = store.get(name)
-  if (!project) return ctx.editMessageText('Proyecto no encontrado.')
+  if (!project) return ctx.editMessageText('Project not found.')
 
-  await ctx.editMessageText(`🗑️ Eliminando *${name}*...`, { parse_mode: 'Markdown' })
+  await ctx.editMessageText(`🗑️ Deleting *${name}*...`, { parse_mode: 'Markdown' })
 
   try {
     const dir = `${config.projectsDir}/${name}`
@@ -531,10 +530,10 @@ bot.action(/^nbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
   const model = modelMap[ctx.match[1]] || 'claude-sonnet-4-6'
   const name = ctx.match[2]
   const state = pendingNew.get(ctx.chat.id)
-  if (!state || state.step !== 'model' || state.name !== name) return ctx.editMessageText('Sesión expirada. Usa /menu.')
+  if (!state || state.step !== 'model' || state.name !== name) return ctx.editMessageText('Session expired. Use /menu.')
   pendingNew.delete(ctx.chat.id)
 
-  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Already building...', { show_alert: true })
   buildingSet.add(name)
 
   // Start deploy in background to avoid timeout
@@ -542,11 +541,11 @@ bot.action(/^nbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
     .then(ok => {
       if (ok) {
         const url = `https://${name}.${process.env.DOMAIN ?? 'maksym.site'}`
-        ctx.reply(`✅ *${name}* listo!\n\n🔗 ${url}`, { parse_mode: 'Markdown' }).catch(() => {})
+        ctx.reply(`✅ *${name}* is ready!\n\n🔗 ${url}`, { parse_mode: 'Markdown' }).catch(() => {})
         sendProjectMenu(ctx, name).catch(() => {})
       }
     })
-    .catch(err => console.error('Error en deploy:', err))
+    .catch(err => console.error('Deploy error:', err))
     .finally(() => buildingSet.delete(name))
 })
 
@@ -563,13 +562,13 @@ bot.action(/^rbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
   const state = pendingRebuild.get(ctx.chat.id)
   if (!state || state.step !== 'model' || state.name !== name) {
     pendingRebuild.delete(ctx.chat.id)
-    return ctx.editMessageText('Sesión expirada. Usa /menu.')
+    return ctx.editMessageText('Session expired. Use /menu.')
   }
   pendingRebuild.delete(ctx.chat.id)
 
   const project = store.get(name)
-  if (!project) return ctx.editMessageText(`Proyecto "${name}" no encontrado.`)
-  if (buildingSet.has(name)) return ctx.answerCbQuery('Ya se está construyendo...', { show_alert: true })
+  if (!project) return ctx.editMessageText(`Project "${name}" not found.`)
+  if (buildingSet.has(name)) return ctx.answerCbQuery('Already building...', { show_alert: true })
 
   buildingSet.add(name)
 
@@ -578,14 +577,14 @@ bot.action(/^rbm:(sonnet|opus|haiku):(.+)$/, async (ctx) => {
     .then(ok => {
       if (ok) showProject(ctx, name).catch(() => {})
     })
-    .catch(err => console.error('Error en rebuild:', err))
+    .catch(err => console.error('Rebuild error:', err))
     .finally(() => buildingSet.delete(name))
 })
 
 // ── Launch ─────────────────────────────────────────────────────────────────
 
 bot.catch((err, ctx) => {
-  console.error(`Error en update ${ctx?.updateType}:`, err.message)
+  console.error(`Error in update ${ctx?.updateType}:`, err.message)
   if (err.message.includes('path')) {
     console.error('Full error:', err)
   }

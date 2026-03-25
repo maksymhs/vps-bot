@@ -240,7 +240,7 @@ async function rebuildProject(nav, name) {
   }])
 
   const description = mode === 'patch'
-    ? `${project.description}\n\nCambios solicitados: ${desc}`
+    ? `${project.description}\n\nRequested changes: ${desc}`
     : desc
 
   console.log(chalk.cyan(`\n  Rebuilding ${chalk.bold(name)}\n`))

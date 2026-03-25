@@ -36,7 +36,7 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-// Versión con streaming de output
+// Version with output streaming
 function runWithStreaming(cmd, args, opts = {}) {
   const { onData, timeout = 300_000, cwd, env } = opts
   return new Promise((resolve, reject) => {
@@ -75,7 +75,7 @@ function runWithStreaming(cmd, args, opts = {}) {
 
     const timeoutHandle = setTimeout(() => {
       child.kill()
-      reject(new Error(`Comando excedió timeout (${timeout / 1000}s)`))
+      reject(new Error(`Command exceeded timeout (${timeout / 1000}s)`))
     }, timeout)
 
     child.on('close', (code) => {
@@ -149,31 +149,31 @@ networks:
 
 function buildClaudePrompt(name, description, errorContext = null) {
   const base =
-    `Crea una aplicación web Node.js completa y funcional.\n\n` +
-    `Nombre: ${name}\n` +
-    `Descripción: ${description}\n\n` +
-    `ESTRUCTURA OBLIGATORIA:\n` +
-    `- src/index.js        → Entry point: servidor Express en process.env.PORT || 3000\n` +
-    `- src/routes/          → Rutas separadas si la app tiene múltiples endpoints\n` +
-    `- src/public/          → Archivos estáticos (CSS, JS cliente, imágenes) si aplica\n` +
+    `Create a complete, functional Node.js web application.\n\n` +
+    `Name: ${name}\n` +
+    `Description: ${description}\n\n` +
+    `REQUIRED STRUCTURE:\n` +
+    `- src/index.js        → Entry point: Express server on process.env.PORT || 3000\n` +
+    `- src/routes/          → Separate routes if the app has multiple endpoints\n` +
+    `- src/public/          → Static files (CSS, client JS, images) if applicable\n` +
     `- package.json         → name "${name}", "type": "module", scripts.start "node src/index.js"\n` +
     `- Dockerfile           → FROM node:20-alpine, WORKDIR /app, COPY package*.json ., RUN npm install --omit=dev, COPY . ., EXPOSE 3000, CMD ["node","src/index.js"]\n` +
     `- .dockerignore        → node_modules, .git, .env, *.md\n` +
     `- .gitignore           → node_modules/, .env, dist/\n\n` +
-    `REGLAS:\n` +
-    `1. GET /health debe devolver { status: "ok" } — endpoint obligatorio para health checks\n` +
-    `2. Usa express.static('src/public') para servir archivos estáticos\n` +
-    `3. CSS va en src/public/style.css (NO inline). El diseño debe ser moderno, responsivo y visualmente atractivo\n` +
-    `4. Si la app tiene UI, usa HTML semántico con un layout profesional\n` +
-    `5. Maneja errores con middleware de Express (404 + error handler)\n` +
-    `6. Usa SOLO caracteres ASCII en código JS. Nunca uses − (U+2212), comillas tipográficas ni otros Unicode\n` +
-    `7. NO uses import maps, NO uses require(). Usa ESM (import/export)\n` +
-    `8. NO añadas el nombre del proyecto como título visible. La app decide su propio contenido\n\n` +
-    `Escribe TODOS los archivos al disco. Solo código, sin explicaciones.`
+    `RULES:\n` +
+    `1. GET /health must return { status: "ok" } — mandatory health check endpoint\n` +
+    `2. Use express.static('src/public') to serve static files\n` +
+    `3. CSS goes in src/public/style.css (NOT inline). Design must be modern, responsive, and visually appealing\n` +
+    `4. If the app has a UI, use semantic HTML with a professional layout\n` +
+    `5. Handle errors with Express middleware (404 + error handler)\n` +
+    `6. Use ONLY ASCII characters in JS code. Never use − (U+2212), smart quotes, or other Unicode\n` +
+    `7. Do NOT use import maps, do NOT use require(). Use ESM (import/export)\n` +
+    `8. Do NOT add the project name as a visible title. The app decides its own content\n\n` +
+    `Write ALL files to disk. Code only, no explanations.`
 
   if (!errorContext) return base
 
-  return base + `\n\n⚠️ CORRECCIÓN: El intento anterior falló con este error. Analiza el error y corrige el código:\n${errorContext}`
+  return base + `\n\n⚠️ FIX: The previous attempt failed with this error. Analyze and fix the code:\n${errorContext}`
 }
 
 function buildRebuildPrompt(name, description, mode, existingFiles, errorContext = null) {
@@ -185,21 +185,21 @@ function buildRebuildPrompt(name, description, mode, existingFiles, errorContext
   const fileList = existingFiles.map(f => `  - ${f}`).join('\n')
 
   const prompt =
-    `Modifica el proyecto existente "${name}".\n\n` +
-    `Descripción original del proyecto: ${description.split('\nCambios solicitados:')[0].split('\n\nCambios solicitados:')[0]}\n\n` +
-    `CAMBIOS SOLICITADOS:\n${description.split('Cambios solicitados:').pop()?.trim() || description}\n\n` +
-    `ARCHIVOS EXISTENTES:\n${fileList}\n\n` +
-    `REGLAS:\n` +
-    `1. Modifica SOLO los archivos necesarios para implementar los cambios\n` +
-    `2. NO borres funcionalidad existente a menos que se pida explícitamente\n` +
-    `3. Mantén GET /health → { status: "ok" }\n` +
-    `4. Mantén la estructura de archivos existente\n` +
-    `5. Si necesitas nuevas dependencias, actualiza package.json\n` +
-    `6. Usa SOLO caracteres ASCII en código JS\n` +
-    `7. Escribe los archivos modificados al disco. Solo código, sin explicaciones.`
+    `Modify the existing project "${name}".\n\n` +
+    `Original project description: ${description.split('\nRequested changes:')[0].split('\n\nRequested changes:')[0]}\n\n` +
+    `REQUESTED CHANGES:\n${description.split('Requested changes:').pop()?.trim() || description}\n\n` +
+    `EXISTING FILES:\n${fileList}\n\n` +
+    `RULES:\n` +
+    `1. Modify ONLY the files necessary to implement the changes\n` +
+    `2. Do NOT delete existing functionality unless explicitly requested\n` +
+    `3. Keep GET /health → { status: "ok" }\n` +
+    `4. Keep the existing file structure\n` +
+    `5. If you need new dependencies, update package.json\n` +
+    `6. Use ONLY ASCII characters in JS code\n` +
+    `7. Write modified files to disk. Code only, no explanations.`
 
   if (!errorContext) return prompt
-  return prompt + `\n\n⚠️ CORRECCIÓN: El intento anterior falló:\n${errorContext}`
+  return prompt + `\n\n⚠️ FIX: The previous attempt failed:\n${errorContext}`
 }
 
 function fixUnicodeChars(dir) {
@@ -296,7 +296,7 @@ async function runClaudeWithStreaming(dir, name, description, onProgress, errorC
     onData: async (chunk) => {
       lines.push(...chunk.split('\n').filter(l => l.trim()))
 
-      // Actualizar cada 2 segundos
+      // Update every 2 seconds
       if (Date.now() - lastUpdate > 2000) {
         lastUpdate = Date.now()
         const recent = lines.slice(-12).join('\n')
@@ -550,7 +550,7 @@ async function pollHealth(ip, port, timeoutMs = 40_000, onProgress = null) {
     try {
       if (onProgress) {
         const elapsed = Math.round((Date.now() - (deadline - timeoutMs)) / 1000)
-        await onProgress(`Intento ${attempts}: conectando a http://${ip}:${port}...`)
+        await onProgress(`Attempt ${attempts}: connecting to http://${ip}:${port}...`)
       }
 
       const res = await fetch(`http://${ip}:${port}/`, {
@@ -599,13 +599,13 @@ CMD ["npm", "start"]`
       writeFileSync(join(dir, 'Dockerfile'), dockerfile)
     } else {
       log.error(`[${name}] no Dockerfile generated`)
-      throw new Error('Claude no generó el Dockerfile.')
+      throw new Error('Claude did not generate the Dockerfile.')
     }
   }
 
   writeComposeFile(dir, name)
   log.build(name, 'Docker compose up starting')
-  await onStatus('🐳 Construyendo imagen...')
+  await onStatus('🐳 Building image...')
 
   const onDockerProgress = async (step) => {
     log.build(name, `Docker: ${step}`)
@@ -621,7 +621,7 @@ CMD ["npm", "start"]`
     throw err
   }
 
-  await onStatus('🔍 Verificando...')
+  await onStatus('🔍 Verifying...')
 
   // In IP mode, check via localhost:mappedPort; in domain mode, use container IP:3000
   const project = store.get(name)
@@ -637,7 +637,7 @@ CMD ["npm", "start"]`
     if (!ip) {
       const logs = await getContainerLogs(name)
       log.error(`[${name}] container has no IP`, logs)
-      throw new Error(`Container no arrancó.\n${logs.slice(-800)}`)
+      throw new Error(`Container failed to start.\n${logs.slice(-800)}`)
     }
     healthHost = ip
     healthPort = 3000
@@ -654,13 +654,13 @@ CMD ["npm", "start"]`
     const containerLogs = await getContainerLogs(name)
     log.buildError(name, 'Health check failed after 40s', containerLogs)
     log.error(`[${name}] health check failed after 40s`, containerLogs)
-    throw new Error(`App no responde en 40s.\n${containerLogs.slice(-800)}`)
+    throw new Error(`App not responding after 40s.\n${containerLogs.slice(-800)}`)
   }
 
   const url = projectUrl(name)
   log.build(name, `=== DEPLOY OK === ${url}`)
   log.info(`[${name}] deploy OK → ${url}`)
-  await onStatus(`✅ Listo → ${url}`)
+  await onStatus(`✅ Ready → ${url}`)
 }
 
 async function deployWithRetry(ctx, dir, name, description, action, model = 'claude-sonnet-4-6', mode = null) {
@@ -674,7 +674,7 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
     const onStatus = async (text) => {
       const elapsed = Math.round((Date.now() - buildStart) / 1000)
       const timeStr = elapsed > 60 ? `${Math.floor(elapsed/60)}m ${elapsed%60}s` : `${elapsed}s`
-      const retry = attempt > 1 ? ` · Reintento ${attempt}/${MAX_RETRIES}` : ''
+      const retry = attempt > 1 ? ` · Retry ${attempt}/${MAX_RETRIES}` : ''
       const fullText = `⚙️ *${name}*${retry}\n${text} _${timeStr}_`
 
       if (statusMsgId) {
@@ -701,14 +701,14 @@ async function deployWithRetry(ctx, dir, name, description, action, model = 'cla
       log.error(`[${name}] attempt ${attempt} failed`, err.message)
       if (attempt < MAX_RETRIES) {
         statusMsgId = null
-        await ctx.reply(`⚠️ Intento ${attempt} fallido, reintentando...`, { parse_mode: 'Markdown' })
+        await ctx.reply(`⚠️ Attempt ${attempt} failed, retrying...`, { parse_mode: 'Markdown' })
         await new Promise(r => setTimeout(r, 2000))
       }
     }
   }
 
   log.error(`[${name}] failed after ${MAX_RETRIES} attempts`, lastError?.message)
-  await ctx.reply(`❌ *${name}* — Falló tras ${MAX_RETRIES} intentos`, { parse_mode: 'Markdown' })
+  await ctx.reply(`❌ *${name}* — Failed after ${MAX_RETRIES} attempts`, { parse_mode: 'Markdown' })
   return false
 }
 
@@ -729,11 +729,11 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
 
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
-    await ctx.reply(`✅ *${name}* creado\n🔗 ${url}`, {
+    await ctx.reply(`✅ *${name}* created\n🔗 ${url}`, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback(' URL', `url:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('🔗 URL', `url:${name}`), Markup.button.callback('⬅️ List', 'list')],
       ]),
     })
   }
@@ -743,7 +743,7 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
 export async function deployRebuild(ctx, name, description, model = 'claude-sonnet-4-6', mode = 'patch') {
   const dir = projectDir(name)
 
-  // Si es un rebuild full, borrar el proyecto primero para recrearlo desde cero
+  // For full rebuild, remove the project directory first to recreate from scratch
   if (mode === 'full') {
     try {
       await dockerComposeDown(dir)
@@ -753,7 +753,7 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
       mkdirSync(dir, { recursive: true })
       try { execSync(`chown -R vpsbot:vpsbot ${JSON.stringify(dir)}`) } catch {}
     } catch (err) {
-      console.error('Error limpiando directorio:', err.message)
+      console.error('Error cleaning directory:', err.message)
     }
   }
 
@@ -764,8 +764,8 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
     // Auto-commit changes
     try {
       const commitMsg = mode === 'full'
-        ? `Rebuild completo: ${description.slice(0, 100)}`
-        : `Patch: ${description.split('Cambios solicitados:').pop()?.trim().slice(0, 100) || description.slice(0, 100)}`
+        ? `Full rebuild: ${description.slice(0, 100)}`
+        : `Patch: ${description.split('Requested changes:').pop()?.trim().slice(0, 100) || description.slice(0, 100)}`
       await gitCommit(name, commitMsg)
       log.info(`[${name}] git commit after rebuild`)
     } catch (err) {
@@ -774,11 +774,11 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
 
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
-    await ctx.reply(`✅ *${name}* actualizado\n🔗 ${url}`, {
+    await ctx.reply(`✅ *${name}* updated\n🔗 ${url}`, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('🔗 URL', `url:${name}`), Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('🔗 URL', `url:${name}`), Markup.button.callback('⬅️ List', 'list')],
       ]),
     })
   }
@@ -791,25 +791,25 @@ export async function newCommand(ctx) {
   const description = parts.slice(2).join(' ').trim()
 
   if (!rawName || !description) {
-    return ctx.reply('Uso: /new <nombre> <descripción del proyecto>')
+    return ctx.reply('Usage: /new <name> <project description>')
   }
 
   const name = rawName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
 
   if (store.get(name)) {
-    return ctx.reply(`Ya existe "${name}". Usa /rebuild ${name} para actualizarlo.`)
+    return ctx.reply(`"${name}" already exists. Use /rebuild ${name} to update it.`)
   }
-  if (buildingSet.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
+  if (buildingSet.has(name)) return ctx.reply(`"${name}" is already building...`)
 
   buildingSet.add(name)
-  const msg = await ctx.reply('⚙️ Iniciando...', { parse_mode: 'Markdown' })
+  const msg = await ctx.reply('⚙️ Starting...', { parse_mode: 'Markdown' })
   const ok = await deployNew(ctx, name, description)
   buildingSet.delete(name)
 
   if (ok) {
     return ctx.telegram.editMessageText(
       ctx.chat.id, msg.message_id, undefined,
-      `✅ *${name}* listo!\n\n🔗 ${projectUrl(name)}\n\n_/rebuild ${name} para iterar_`,
+      `✅ *${name}* is ready!\n\n🔗 ${projectUrl(name)}\n\n_/rebuild ${name} to iterate_`,
       { parse_mode: 'Markdown' }
     )
   }
@@ -820,22 +820,22 @@ export async function rebuildCommand(ctx) {
   const name = parts[1]?.toLowerCase()
   const newDescription = parts.slice(2).join(' ').trim()
 
-  if (!name) return ctx.reply('Uso: /rebuild <nombre> [nueva descripción]')
+  if (!name) return ctx.reply('Usage: /rebuild <name> [new description]')
 
   const project = store.get(name)
-  if (!project) return ctx.reply(`Proyecto "${name}" no encontrado. Usa /new para crearlo.`)
-  if (buildingSet.has(name)) return ctx.reply(`Ya se está construyendo "${name}"...`)
+  if (!project) return ctx.reply(`Project "${name}" not found. Use /new to create it.`)
+  if (buildingSet.has(name)) return ctx.reply(`"${name}" is already building...`)
 
   buildingSet.add(name)
   const description = newDescription || project.description
-  const msg = await ctx.reply('♻️ Iniciando...', { parse_mode: 'Markdown' })
+  const msg = await ctx.reply('♻️ Starting...', { parse_mode: 'Markdown' })
   const ok = await deployRebuild(ctx, name, description)
   buildingSet.delete(name)
 
   if (ok) {
     return ctx.telegram.editMessageText(
       ctx.chat.id, msg.message_id, undefined,
-      `✅ *${name}* actualizado!\n\n🔗 ${projectUrl(name)}`,
+      `✅ *${name}* updated!\n\n🔗 ${projectUrl(name)}`,
       { parse_mode: 'Markdown' }
     )
   }
@@ -846,7 +846,7 @@ export async function listCommand(ctx) {
   const names = Object.keys(projects)
 
   if (!names.length) {
-    return ctx.reply('No hay proyectos. Usa `/new <nombre> <descripción>` para crear uno.', { parse_mode: 'Markdown' })
+    return ctx.reply('No projects yet. Use `/new <name> <description>` to create one.', { parse_mode: 'Markdown' })
   }
 
   const lines = names.map(n => {
@@ -859,22 +859,22 @@ export async function listCommand(ctx) {
 
 export async function urlCommand(ctx) {
   const name = ctx.message.text.split(' ')[1]?.toLowerCase()
-  if (!name) return ctx.reply('Uso: /url <nombre>')
+  if (!name) return ctx.reply('Usage: /url <name>')
 
   const project = store.get(name)
-  if (!project) return ctx.reply(`Proyecto "${name}" no encontrado.`)
+  if (!project) return ctx.reply(`Project "${name}" not found.`)
 
   return ctx.reply(`🔗 *${name}*: ${project.url}`, { parse_mode: 'Markdown' })
 }
 
 export async function deleteProjectCommand(ctx) {
   const name = ctx.message.text.split(' ')[1]?.toLowerCase()
-  if (!name) return ctx.reply('Uso: /delete <nombre>')
+  if (!name) return ctx.reply('Usage: /delete <name>')
 
   const project = store.get(name)
-  if (!project) return ctx.reply(`Proyecto "${name}" no encontrado.`)
+  if (!project) return ctx.reply(`Project "${name}" not found.`)
 
-  const msg = await ctx.reply(`🗑️ Eliminando *${name}*...`, { parse_mode: 'Markdown' })
+  const msg = await ctx.reply(`🗑️ Deleting *${name}*...`, { parse_mode: 'Markdown' })
   const dir = projectDir(name)
 
   try {
@@ -884,13 +884,13 @@ export async function deleteProjectCommand(ctx) {
 
     return ctx.telegram.editMessageText(
       ctx.chat.id, msg.message_id, undefined,
-      `🗑️ *${name}* eliminado.`,
+      `🗑️ *${name}* deleted.`,
       { parse_mode: 'Markdown' }
     )
   } catch (err) {
     return ctx.telegram.editMessageText(
       ctx.chat.id, msg.message_id, undefined,
-      `❌ Error eliminando *${name}*:\n\`${err.message.slice(0, 300)}\``,
+      `❌ Error deleting *${name}*:\n\`${err.message.slice(0, 300)}\``,
       { parse_mode: 'Markdown' }
     )
   }

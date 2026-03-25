@@ -29,11 +29,11 @@ export async function showMain(ctx, edit = false) {
   const text = '⚡ *vps-bot*\n_Describe it. Deploy it._'
   const kb = Markup.inlineKeyboard([
     [
-      Markup.button.callback('📊 Estado', 'status'),
+      Markup.button.callback('📊 Status', 'status'),
       Markup.button.callback('📦 Containers', 'ps'),
     ],
-    [Markup.button.callback('🚀 Mis proyectos', 'list')],
-    [Markup.button.callback('➕ Nuevo proyecto', 'new')],
+    [Markup.button.callback('🚀 My Projects', 'list')],
+    [Markup.button.callback('➕ New Project', 'new')],
     [
       Markup.button.callback('💻 Code-Server', 'codeserver'),
       Markup.button.callback('⚡ Claude Usage', 'usage'),
@@ -49,22 +49,22 @@ export async function showMain(ctx, edit = false) {
 export async function showList(ctx) {
   const projects = store.getAll()
   const names = Object.keys(projects)
-  const back = Markup.button.callback('⬅️ Menú', 'main')
+  const back = Markup.button.callback('⬅️ Menu', 'main')
 
   if (!names.length) {
-    return ctx.editMessageText('📁 *Proyectos*\n\nNo hay proyectos aún.', {
+    return ctx.editMessageText('📁 *Projects*\n\nNo projects yet.', {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('➕ Crear proyecto', 'new')],
+        [Markup.button.callback('➕ Create Project', 'new')],
         [back],
       ]),
     })
   }
 
   const rows = names.map(n => [Markup.button.callback(`📦 ${n}`, `p:${n}`)])
-  rows.push([Markup.button.callback('➕ Nuevo', 'new'), back])
+  rows.push([Markup.button.callback('➕ New', 'new'), back])
 
-  return ctx.editMessageText('📁 *Proyectos*\n\nSelecciona uno:', {
+  return ctx.editMessageText('📁 *Projects*\n\nSelect one:', {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard(rows),
   })
@@ -75,9 +75,9 @@ export async function showList(ctx) {
 export async function showProject(ctx, name) {
   const project = store.get(name)
   if (!project) {
-    return ctx.editMessageText(`Proyecto *${name}* no encontrado.`, {
+    return ctx.editMessageText(`Project *${name}* not found.`, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Lista', 'list')]]),
+      ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ List', 'list')]]),
     })
   }
 
@@ -95,9 +95,9 @@ export async function showProject(ctx, name) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('♻️ Rebuild', `rb:${name}`), Markup.button.callback('📋 Logs', `lg:${name}`)],
-        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copiar URL', `url:${name}`)],
-        [Markup.button.callback('⚙️ Git', `git_menu:${name}`), Markup.button.callback('🗑️ Eliminar', `del:${name}`)],
-        [toggleBtn, Markup.button.callback('⬅️ Lista', 'list')],
+        [Markup.button.callback('💻 Code-Server', `cs:${name}`), Markup.button.callback('🔗 Copy URL', `url:${name}`)],
+        [Markup.button.callback('⚙️ Git', `git_menu:${name}`), Markup.button.callback('🗑️ Delete', `del:${name}`)],
+        [toggleBtn, Markup.button.callback('⬅️ List', 'list')],
       ]),
     }
   )
@@ -107,15 +107,15 @@ export async function showProject(ctx, name) {
 
 export async function showGitMenu(ctx, name) {
   return ctx.editMessageText(
-    `🔧 *Git - ${name}*\n\n¿Qué quieres hacer?`,
+    `🔧 *Git - ${name}*`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('📤 Push', `gp:${name}`), Markup.button.callback('📥 Pull', `gpl:${name}`)],
         [Markup.button.callback('📊 Status', `gs:${name}`)],
-        [Markup.button.callback('⚙️ Inicializar Repo', `git_init:${name}`)],
-        [Markup.button.callback('💬 Commit Personalizado', `git_commit:${name}`)],
-        [Markup.button.callback('⬅️ Volver', `p:${name}`)],
+        [Markup.button.callback('⚙️ Init Repo', `git_init:${name}`)],
+        [Markup.button.callback('💬 Custom Commit', `git_commit:${name}`)],
+        [Markup.button.callback('⬅️ Back', `p:${name}`)],
       ]),
     }
   )
@@ -125,12 +125,12 @@ export async function showGitMenu(ctx, name) {
 
 export async function showDeleteConfirm(ctx, name) {
   return ctx.editMessageText(
-    `⚠️ ¿Eliminar *${name}*?\n\nSe borrará el container, imagen y todos los archivos.`,
+    `⚠️ Delete *${name}*?\n\nThis will remove the container, image, and all files.`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([[
-        Markup.button.callback('✅ Sí, eliminar', `del_ok:${name}`),
-        Markup.button.callback('❌ Cancelar', `p:${name}`),
+        Markup.button.callback('✅ Yes, delete', `del_ok:${name}`),
+        Markup.button.callback('❌ Cancel', `p:${name}`),
       ]]),
     }
   )
@@ -142,13 +142,13 @@ export async function startRebuildFlow(ctx, name) {
   const project = store.get(name)
   const desc = (project?.description ?? '').slice(0, 200)
   return ctx.editMessageText(
-    `♻️ *Rebuild: ${name}*\n\n📝 Descripción actual:\n_${desc}_\n\n¿Cómo quieres proceder?`,
+    `♻️ *Rebuild: ${name}*\n\n📝 Current description:\n_${desc}_`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('✏️ Añadir cambios', `rb_patch:${name}`)],
-        [Markup.button.callback('🔁 Rehacer todo', `rb_full:${name}`)],
-        [Markup.button.callback('❌ Cancelar', `p:${name}`)],
+        [Markup.button.callback('✏️ Patch (add changes)', `rb_patch:${name}`)],
+        [Markup.button.callback('🔁 Full rebuild', `rb_full:${name}`)],
+        [Markup.button.callback('❌ Cancel', `p:${name}`)],
       ]),
     }
   )
@@ -157,10 +157,10 @@ export async function startRebuildFlow(ctx, name) {
 export async function startRebuildPatch(ctx, name) {
   pendingRebuild.set(ctx.chat.id, { name, mode: 'patch', step: 'text' })
   return ctx.editMessageText(
-    `✏️ *Cambios para ${name}*\n\nEscribe qué quieres cambiar (color, layout, funcionalidad...):`,
+    `✏️ *Changes for ${name}*\n\nDescribe what you want to change:`,
     {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancelar', `p:${name}`)]]),
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancel', `p:${name}`)]]),
     }
   )
 }
@@ -168,16 +168,16 @@ export async function startRebuildPatch(ctx, name) {
 export async function startRebuildFull(ctx, name) {
   pendingRebuild.set(ctx.chat.id, { name, mode: 'full', step: 'text' })
   return ctx.editMessageText(
-    `🔁 *Rehacer ${name}*\n\nEscribe la nueva descripción completa del proyecto:`,
+    `🔁 *Full rebuild: ${name}*\n\nDescribe the new project from scratch:`,
     {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancelar', `p:${name}`)]]),
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancel', `p:${name}`)]]),
     }
   )
 }
 
 export function showModelSelect(ctx, prefix, name, edit = false) {
-  const text = `🤖 *Elige el modelo*\n\n🚀 *Sonnet* — rápido y eficiente _(recomendado)_\n🧠 *Opus* — más potente, más lento\n⚡ *Haiku* — ultrarrápido, perfecta para tareas simples`
+  const text = `🤖 *Select model*\n\n🚀 *Sonnet* — fast and efficient _(recommended)_\n🧠 *Opus* — more powerful, slower\n⚡ *Haiku* — ultra-fast, great for simple tasks`
 
   const kb = [
     [
@@ -187,7 +187,7 @@ export function showModelSelect(ctx, prefix, name, edit = false) {
     [
       Markup.button.callback('⚡ Haiku', `${prefix}:haiku:${name}`),
     ],
-    [Markup.button.callback('❌ Cancelar', `p:${name}`)],
+    [Markup.button.callback('❌ Cancel', `p:${name}`)],
   ]
 
   return edit
@@ -200,10 +200,10 @@ export function showModelSelect(ctx, prefix, name, edit = false) {
 export async function startNewFlow(ctx) {
   pendingNew.set(ctx.chat.id, { step: 'name' })
   return ctx.editMessageText(
-    '➕ *Nuevo proyecto*\n\n¿Cómo se llamará? (solo letras, números y guiones)',
+    '➕ *New project*\n\nProject name? (letters, numbers, and hyphens only)',
     {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancelar', 'list')]]),
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancel', 'list')]]),
     }
   )
 }
