@@ -32,9 +32,13 @@ Manage everything from an **interactive CLI** or **Telegram bot** — same featu
 ## Quick Start
 
 ```bash
-git clone https://github.com/maksymhs/vps-bot.git
-cd vps-bot
-bash install.sh
+curl -sL https://raw.githubusercontent.com/maksymhs/vps-bot/main/install.sh | bash -s -- --clone
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/maksymhs/vps-bot.git && cd vps-bot && bash install.sh
 ```
 
 The installer handles everything: Node.js, Docker, Caddy, Claude Code, code-server, user setup, systemd services.

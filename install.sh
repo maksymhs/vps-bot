@@ -2,6 +2,19 @@
 
 set -e
 
+# --clone mode: clone repo first, then run install from inside it
+if [[ "$1" == "--clone" ]]; then
+  REPO="https://github.com/maksymhs/vps-bot.git"
+  DEST="/root/vps-bot"
+  if [ -d "$DEST" ]; then
+    echo "Updating existing installation..."
+    cd "$DEST" && git pull --ff-only
+  else
+    git clone "$REPO" "$DEST"
+  fi
+  exec bash "$DEST/install.sh"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
