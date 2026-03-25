@@ -1,8 +1,15 @@
 {
-  "name": "vps-code-bot",
+  "name": "vps-bot",
   "version": "1.0.0",
-  "description": "Intelligent VPS management platform with automatic application generation powered by Claude Code",
+  "description": "AI-powered VPS platform — describe an app, get it running with Docker + SSL in minutes",
   "type": "module",
+  "author": "maksymhs (https://github.com/maksymhs)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maksymhs/vps-bot.git"
+  },
+  "keywords": ["vps", "deploy", "docker", "claude", "ai", "telegram", "code-server"],
   "scripts": {
     "start": "node src/cli-home.js",
     "bot": "node src/bot.js",

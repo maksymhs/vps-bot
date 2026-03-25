@@ -104,7 +104,7 @@ const cliCtx = {
 async function showMainMenu(clear = true) {
   if (clear) console.clear()
   console.log(chalk.cyan(getBanner()))
-  console.log(chalk.gray(`v${PROJECT.version}\n`))
+  console.log(chalk.gray(`  ${PROJECT.tagline}  ·  v${PROJECT.version}\n`))
 
   const { action } = await inquirer.prompt([
     {

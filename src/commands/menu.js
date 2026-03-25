@@ -26,7 +26,7 @@ async function containerStatus(projectName) {
 // ── Main menu ──────────────────────────────────────────────────────────────
 
 export async function showMain(ctx, edit = false) {
-  const text = '👾 *VPS Bot*\n\n¿Qué quieres hacer?'
+  const text = '⚡ *vps-bot*\n_Describe it. Deploy it._'
   const kb = Markup.inlineKeyboard([
     [
       Markup.button.callback('📊 Estado', 'status'),

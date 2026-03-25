@@ -1,21 +1,23 @@
 export const PROJECT = {
-  name: 'vps-code-bot',
-  tagline: 'VPS Management Platform',
+  name: 'vps-bot',
+  tagline: 'Describe it. Deploy it.',
   version: '1.0.0',
-  description: 'Intelligent VPS management with automatic application generation powered by Claude',
+  author: 'maksymhs',
+  repo: 'https://github.com/maksymhs/vps-bot',
+  description: 'AI-powered VPS platform — describe an app, get it running with Docker + SSL in minutes',
 }
 
 export function getBanner() {
   return `
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  │              VPS-CODE-BOT                           │
-  │         VPS Management Platform v1.0                │
-  │                                                     │
-  └─────────────────────────────────────────────────────┘
+                  __          __  
+   _   ___ ___   / /_  ____  / /_ 
+  | | / / __ \\ / __ \\/ __ \\/ __/ 
+  | |/ / /_/ // /_/ / /_/ / /_   
+  |___/ .___//_____/\\____/\\__/   
+     /_/                          
 `
 }
 
 export function getSmallBanner() {
-  return `VPS-CODE-BOT v${PROJECT.version}`
+  return `vps-bot v${PROJECT.version}`
 }

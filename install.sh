@@ -101,10 +101,14 @@ run_silent_sh() {
 }
 
 echo ""
-echo -e "${CYAN}${BOLD}  ╔═══════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}${BOLD}  ║           ⚡ VPS-CODE-BOT INSTALLER ⚡           ║${NC}"
-echo -e "${CYAN}${BOLD}  ║        Smart VPS Management Platform             ║${NC}"
-echo -e "${CYAN}${BOLD}  ╚═══════════════════════════════════════════════════╝${NC}"
+echo -e "${CYAN}${BOLD}                  __          __  ${NC}"
+echo -e "${CYAN}${BOLD}   _   ___ ___   / /_  ____  / /_ ${NC}"
+echo -e "${CYAN}${BOLD}  | | / / __ \\ / __ \\/ __ \\/ __/ ${NC}"
+echo -e "${CYAN}${BOLD}  | |/ / /_/ // /_/ / /_/ / /_   ${NC}"
+echo -e "${CYAN}${BOLD}  |___/ .___//_____/\\____/\\__/   ${NC}"
+echo -e "${CYAN}${BOLD}     /_/                          ${NC}"
+echo ""
+echo -e "  ${DIM}Describe it. Deploy it.${NC}"
 echo ""
 
 # Detect OS
@@ -320,9 +324,7 @@ systemctl daemon-reload > /dev/null 2>&1
 chown -R "${VPSBOT_USER}:${VPSBOT_USER}" "$PROJECTS_DIR" 2>/dev/null || true
 
 echo ""
-echo -e "  ${GREEN}${BOLD}╔═══════════════════════════════════════════════════╗${NC}"
-echo -e "  ${GREEN}${BOLD}║          ✔ Installation complete!                ║${NC}"
-echo -e "  ${GREEN}${BOLD}╚═══════════════════════════════════════════════════╝${NC}"
+echo -e "  ${GREEN}${BOLD}✔ Installation complete${NC}"
 echo -e "  ${DIM}Log: ${LOG_FILE}${NC}"
 echo ""
 
