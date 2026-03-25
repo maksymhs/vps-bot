@@ -45,6 +45,9 @@ export const config = {
   codeServerPort: parseInt(process.env.CODE_SERVER_PORT ?? '8080'),
   get codeServerPassword() { return process.env.CODE_SERVER_PASSWORD ?? 'changeme' },
 
+  // Auto-sleep: stop idle containers after N minutes (0 = disabled)
+  get idleTimeout() { return parseInt(process.env.IDLE_TIMEOUT ?? '0') },
+
   // Caddy Admin API
   caddyAdminUrl: process.env.CADDY_ADMIN_URL ?? 'http://localhost:2019',
 

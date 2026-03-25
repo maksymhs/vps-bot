@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url'
 import { log } from './lib/logger.js'
 import { getCodeServerUrl, getCodeServerBaseUrl, ensureCodeServer } from './lib/code-server.js'
 import { gitPush, gitPull, gitStatus, initGitRepo, gitCommit } from './commands/git.js'
+import { wakeContainer, startSleepManager, stopSleepManager } from './lib/sleep-manager.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envFile = join(dirname(__dirname), '.env')
@@ -202,13 +203,25 @@ async function showProjects() {
     return showMainMenu()
   }
 
+  // Build choices with status indicators
+  const projectChoices = await Promise.all(names.map(async (n) => {
+    const p = projects[n]
+    let icon = '⚪'
+    try {
+      const cs = await getDocker().listContainers({ all: true, filters: JSON.stringify({ name: [`${n}-app`] }) })
+      const state = cs[0]?.State
+      icon = state === 'running' ? '🟢' : (p.sleeping ? '🌙' : '🔴')
+    } catch {}
+    return { name: `${icon} ${n}`, value: n }
+  }))
+
   const { name } = await inquirer.prompt([
     {
       type: 'list',
       name: 'name',
       message: 'Select a project:',
       loop: false,
-      choices: [...names, new inquirer.Separator(), 'Back'],
+      choices: [...projectChoices, new inquirer.Separator(), 'Back'],
     },
   ])
 
@@ -231,7 +244,8 @@ async function showProjectMenu(name) {
       filters: JSON.stringify({ name: [`${name}-app`] }),
     })
     const status = containers[0]?.State ?? 'unknown'
-    const statusStr = status === 'running' ? chalk.green('running') : chalk.red('stopped')
+    const isSleeping = project.sleeping && status !== 'running'
+    const statusStr = isSleeping ? chalk.yellow('sleeping') : status === 'running' ? chalk.green('running') : chalk.red('stopped')
 
     console.log(chalk.cyan(`\n[${name}] Status: ${statusStr}\n`))
 
@@ -243,9 +257,11 @@ async function showProjectMenu(name) {
         loop: false,
         choices: [
           { name: 'View Logs', value: 'logs' },
-          ...(status === 'running'
-            ? [{ name: 'Stop', value: 'stop' }]
-            : [{ name: 'Start', value: 'start' }]),
+          ...(isSleeping
+            ? [{ name: '☀️  Wake', value: 'wake' }]
+            : status === 'running'
+              ? [{ name: 'Stop', value: 'stop' }]
+              : [{ name: 'Start', value: 'start' }]),
           { name: 'Rebuild', value: 'rebuild' },
           { name: 'Code-Server (IDE)', value: 'codeserver' },
           { name: 'Git', value: 'git' },
@@ -273,6 +289,12 @@ async function showProjectMenu(name) {
     }
     if (action === 'start') {
       await startContainer(name)
+      return showProjectMenu(name)
+    }
+    if (action === 'wake') {
+      startSpinner('Waking up...')
+      const ok = await wakeContainer(name)
+      stopSpinner(ok ? `${name} is awake` : `Failed to wake ${name}`, ok)
       return showProjectMenu(name)
     }
     if (action === 'rebuild') {
@@ -815,6 +837,8 @@ async function showConfig() {
     ? chalk.gray('not set')
     : botRunning ? chalk.green('running') : chalk.yellow('configured (stopped)')
   console.log(`  Telegram:    ${telegramStatus}`)
+  const idleLabel = config.idleTimeout > 0 ? chalk.green(`${config.idleTimeout}m`) : chalk.gray('off')
+  console.log(`  Auto-sleep:  ${idleLabel}`)
   console.log(`  Projects:    ${config.projectsDir}`)
   console.log('')
 
@@ -829,6 +853,7 @@ async function showConfig() {
       { name: 'Set Telegram Bot', value: 'telegram' },
       ...(process.env.BOT_TOKEN ? [{ name: `${botRunning ? '🟢' : '🔴'} Telegram Bot (${botRunning ? 'running' : 'stopped'})`, value: 'bot' }] : []),
       { name: 'Change Code-Server Password', value: 'password' },
+      { name: `Auto-sleep (${config.idleTimeout > 0 ? config.idleTimeout + 'm' : 'off'})`, value: 'idle' },
       new inquirer.Separator(),
       { name: 'View System Logs', value: 'logs' },
       { name: 'Back', value: 'back' },
@@ -841,6 +866,7 @@ async function showConfig() {
   if (action === 'telegram') return configureTelegram()
   if (action === 'bot') return manageTelegramBot()
   if (action === 'password') return configurePassword()
+  if (action === 'idle') return configureIdleTimeout()
   if (action === 'logs') return showSystemLogs()
 }
 
@@ -1216,6 +1242,38 @@ async function configurePassword() {
     console.log(chalk.green(`\n✓ Password updated. New password: ${password}`))
     console.log(chalk.yellow('⚠ Could not restart code-server. Run: systemctl restart code-server\n'))
   }
+  return showConfig()
+}
+
+async function configureIdleTimeout() {
+  console.clear()
+  const current = config.idleTimeout
+  console.log(chalk.cyan(`\nAuto-sleep: ${current > 0 ? `${current} minutes` : 'disabled'}\n`))
+  console.log(chalk.gray('  Idle containers are stopped to save resources.'))
+  console.log(chalk.gray('  They wake automatically on the next request.\n'))
+
+  const { timeout } = await inquirer.prompt([{
+    type: 'list',
+    name: 'timeout',
+    message: 'Stop idle containers after:',
+    loop: false,
+    choices: [
+      { name: 'Disabled', value: '0' },
+      { name: '5 minutes', value: '5' },
+      { name: '10 minutes', value: '10' },
+      { name: '30 minutes', value: '30' },
+      { name: '60 minutes', value: '60' },
+    ],
+  }])
+
+  updateEnvVar('IDLE_TIMEOUT', timeout)
+
+  if (timeout === '0') {
+    console.log(chalk.green('\n✓ Auto-sleep disabled\n'))
+  } else {
+    console.log(chalk.green(`\n✓ Containers will sleep after ${timeout}m of inactivity\n`))
+  }
+
   return showConfig()
 }
 

@@ -13,6 +13,7 @@ import { buildingSet } from './lib/build-state.js'
 import { config } from './lib/config.js'
 import { getBanner } from './lib/branding.js'
 import { getCodeServerUrl, ensureCodeServer } from './lib/code-server.js'
+import { startSleepManager, stopSleepManager } from './lib/sleep-manager.js'
 import { existsSync, rmSync } from 'fs'
 import chalk from 'chalk'
 
@@ -591,8 +592,9 @@ bot.catch((err, ctx) => {
 })
 
 bot.launch()
+startSleepManager()
 console.log(getBanner())
 console.log(chalk.green('Bot started successfully.\n'))
 
-process.once('SIGINT', () => bot.stop('SIGINT'))
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
+process.once('SIGINT', () => { stopSleepManager(); bot.stop('SIGINT') })
+process.once('SIGTERM', () => { stopSleepManager(); bot.stop('SIGTERM') })

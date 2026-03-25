@@ -147,6 +147,25 @@ From **Configuration → Set Custom Domain**:
 
 No domain? Works with `http://ip:port` out of the box.
 
+## Auto-sleep
+
+Save resources by automatically stopping idle containers. From **Configuration → Auto-sleep**:
+
+```
+? Stop idle containers after:
+  Disabled
+  5 minutes
+❯ 10 minutes
+  30 minutes
+  60 minutes
+```
+
+- Containers with no network traffic are stopped after the configured timeout
+- Sleeping containers show 🌙 in the project list
+- **Wake on request**: visiting a sleeping app shows a "waking up" page and auto-restarts the container
+- Wake manually from CLI (`☀️ Wake`) or Telegram
+- All sleep/wake events logged to `logs/system.log`
+
 ## Architecture
 
 ```
