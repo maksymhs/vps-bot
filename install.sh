@@ -12,7 +12,8 @@ if [[ "$1" == "--clone" ]]; then
   else
     git clone "$REPO" "$DEST"
   fi
-  exec bash "$DEST/install.sh"
+  # Re-exec with stdin from TTY so interactive menus work after curl pipe
+  exec bash "$DEST/install.sh" < /dev/tty
 fi
 
 # Colors
