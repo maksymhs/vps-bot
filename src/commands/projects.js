@@ -106,9 +106,9 @@ function getNextPort() {
 function writeComposeFile(dir, name) {
   let compose
   if (config.domain) {
-    // Domain mode: Caddy reverse proxy via labels
     compose = `services:
   app:
+    container_name: ${name}-app
     build: .
     restart: unless-stopped
     networks:
@@ -116,22 +116,32 @@ function writeComposeFile(dir, name) {
     labels:
       caddy: ${name}.${config.domain}
       caddy.reverse_proxy: "{{upstreams 3000}}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   caddy:
     external: true
 `
   } else {
-    // IP mode: expose port directly on host (HTTP)
     const port = store.get(name)?.port || getNextPort()
     const url = `http://${config.ipAddress || 'localhost'}:${port}`
     store.set(name, { port, url })
     compose = `services:
   app:
+    container_name: ${name}-app
     build: .
     restart: unless-stopped
     ports:
       - "${port}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 `
   }
   writeFileSync(join(dir, 'docker-compose.yml'), compose)
@@ -139,19 +149,57 @@ networks:
 
 function buildClaudePrompt(name, description, errorContext = null) {
   const base =
-    `Crea un proyecto Node.js. Descripción: ${description}\n\n` +
-    `Requisitos estrictos:\n` +
-    `1. Crea src/index.js — servidor Express que escucha en process.env.PORT || 3000\n` +
-    `2. La app implementa lo que describe la descripción. NO añadas el nombre del proyecto ni la descripción como contenido visible en el HTML — eso lo decide la app según su lógica\n` +
-    `3. Crea package.json con name "${name}", "type": "module", scripts.start "node src/index.js"\n` +
-    `4. Crea Dockerfile: FROM node:20-alpine, WORKDIR /app, COPY package*.json ., RUN npm install, COPY . ., EXPOSE 3000, CMD ["npm","start"]\n` +
-    `5. Crea .dockerignore con: node_modules\\n.git\\n.env\n` +
-    `6. Usa SOLO caracteres ASCII en el código JavaScript. Nunca uses − (U+2212), " " (comillas tipográficas) ni otros Unicode en código JS\n` +
+    `Crea una aplicación web Node.js completa y funcional.\n\n` +
+    `Nombre: ${name}\n` +
+    `Descripción: ${description}\n\n` +
+    `ESTRUCTURA OBLIGATORIA:\n` +
+    `- src/index.js        → Entry point: servidor Express en process.env.PORT || 3000\n` +
+    `- src/routes/          → Rutas separadas si la app tiene múltiples endpoints\n` +
+    `- src/public/          → Archivos estáticos (CSS, JS cliente, imágenes) si aplica\n` +
+    `- package.json         → name "${name}", "type": "module", scripts.start "node src/index.js"\n` +
+    `- Dockerfile           → FROM node:20-alpine, WORKDIR /app, COPY package*.json ., RUN npm install --omit=dev, COPY . ., EXPOSE 3000, CMD ["node","src/index.js"]\n` +
+    `- .dockerignore        → node_modules, .git, .env, *.md\n` +
+    `- .gitignore           → node_modules/, .env, dist/\n\n` +
+    `REGLAS:\n` +
+    `1. GET /health debe devolver { status: "ok" } — endpoint obligatorio para health checks\n` +
+    `2. Usa express.static('src/public') para servir archivos estáticos\n` +
+    `3. CSS va en src/public/style.css (NO inline). El diseño debe ser moderno, responsivo y visualmente atractivo\n` +
+    `4. Si la app tiene UI, usa HTML semántico con un layout profesional\n` +
+    `5. Maneja errores con middleware de Express (404 + error handler)\n` +
+    `6. Usa SOLO caracteres ASCII en código JS. Nunca uses − (U+2212), comillas tipográficas ni otros Unicode\n` +
+    `7. NO uses import maps, NO uses require(). Usa ESM (import/export)\n` +
+    `8. NO añadas el nombre del proyecto como título visible. La app decide su propio contenido\n\n` +
     `Escribe TODOS los archivos al disco. Solo código, sin explicaciones.`
 
   if (!errorContext) return base
 
-  return base + `\n\nEl intento anterior falló con este error — corrígelo:\n${errorContext}`
+  return base + `\n\n⚠️ CORRECCIÓN: El intento anterior falló con este error. Analiza el error y corrige el código:\n${errorContext}`
+}
+
+function buildRebuildPrompt(name, description, mode, existingFiles, errorContext = null) {
+  if (mode === 'full') {
+    return buildClaudePrompt(name, description, errorContext)
+  }
+
+  // Patch mode: give Claude context about existing files
+  const fileList = existingFiles.map(f => `  - ${f}`).join('\n')
+
+  const prompt =
+    `Modifica el proyecto existente "${name}".\n\n` +
+    `Descripción original del proyecto: ${description.split('\nCambios solicitados:')[0].split('\n\nCambios solicitados:')[0]}\n\n` +
+    `CAMBIOS SOLICITADOS:\n${description.split('Cambios solicitados:').pop()?.trim() || description}\n\n` +
+    `ARCHIVOS EXISTENTES:\n${fileList}\n\n` +
+    `REGLAS:\n` +
+    `1. Modifica SOLO los archivos necesarios para implementar los cambios\n` +
+    `2. NO borres funcionalidad existente a menos que se pida explícitamente\n` +
+    `3. Mantén GET /health → { status: "ok" }\n` +
+    `4. Mantén la estructura de archivos existente\n` +
+    `5. Si necesitas nuevas dependencias, actualiza package.json\n` +
+    `6. Usa SOLO caracteres ASCII en código JS\n` +
+    `7. Escribe los archivos modificados al disco. Solo código, sin explicaciones.`
+
+  if (!errorContext) return prompt
+  return prompt + `\n\n⚠️ CORRECCIÓN: El intento anterior falló:\n${errorContext}`
 }
 
 function fixUnicodeChars(dir) {
@@ -164,100 +212,82 @@ function fixUnicodeChars(dir) {
   } catch { /* ignore */ }
 }
 
-async function runClaude(dir, name, description, onProgress = null, errorContext = null, model = 'claude-sonnet-4-6') {
-  const prompt = buildClaudePrompt(name, description, errorContext)
-  const { readdirSync } = await import('fs')
+function getExistingFiles(dir) {
+  try {
+    const entries = execSync(`find ${JSON.stringify(dir)} -type f -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null || true`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).toString().trim().split('\n').filter(Boolean)
+    return entries.map(e => e.replace(dir + '/', '')).filter(f => f && !f.startsWith('.git/'))
+  } catch {
+    return []
+  }
+}
+
+async function runClaude(dir, name, description, onProgress = null, errorContext = null, model = 'claude-sonnet-4-6', mode = 'new') {
+  const existingFiles = mode === 'new' ? [] : getExistingFiles(dir)
+  const prompt = mode === 'new' || mode === 'full'
+    ? buildClaudePrompt(name, description, errorContext)
+    : buildRebuildPrompt(name, description, 'patch', existingFiles, errorContext)
+
+  const { readdirSync, statSync, readFileSync: readF } = await import('fs')
+  const startTime = Date.now()
 
   if (onProgress) {
-    await onProgress('🧠 Claude Code analizando...')
+    await onProgress('🧠 Claude Code generando código...')
   }
 
-  // Polling de archivos creados
-  const createdFiles = new Set()
-  let pollInterval = null
-  let pendingFiles = []
-  let lastFileUpdate = Date.now()
-
-  if (onProgress) {
-    pollInterval = setInterval(async () => {
-      try {
-        const files = readdirSync(dir, { recursive: true })
-        for (const file of files) {
-          if (typeof file === 'string' && !file.includes('node_modules') && !createdFiles.has(file)) {
-            createdFiles.add(file)
-            const icon = file.endsWith('.js') ? '📄' : file.endsWith('.json') ? '📦' : file.endsWith('.yml') || file.endsWith('.yaml') ? '⚙️' : '📁'
-            pendingFiles.push(`${icon} \`${file}\``)
-          }
-        }
-
-        // Enviar archivos acumulados cada 2 segundos
-        if (pendingFiles.length > 0 && Date.now() - lastFileUpdate > 2000) {
-          lastFileUpdate = Date.now()
-          await onProgress(`✏️ Creando archivos:\n${pendingFiles.join('\n')}`)
-          pendingFiles = []
-        }
-      } catch (err) {
-        // Ignorar errores de lectura
-      }
-    }, 500)
-  }
+  // Track files created during build
+  const initialFiles = new Set()
+  try {
+    for (const f of readdirSync(dir, { recursive: true })) {
+      if (typeof f === 'string') initialFiles.add(f)
+    }
+  } catch {}
 
   try {
     const claudeBin = config.claudeCli || 'claude'
     const claudeCmd = `cd ${JSON.stringify(dir)} && ${claudeBin} -p ${JSON.stringify(prompt)} --dangerously-skip-permissions --model ${model}`
     await run('su', ['-', 'vpsbot', '-c', claudeCmd], { timeout: 300_000 })
-    // Registrar uso de Claude
     try {
-      recordClaudeCall(Math.round(prompt.length / 4)) // Estima tokens (aprox 1 token por 4 chars)
-    } catch (err) {
-      console.error('Error registrando uso:', err.message)
-    }
+      recordClaudeCall(Math.round(prompt.length / 4))
+    } catch {}
   } finally {
-    if (pollInterval) clearInterval(pollInterval)
-    // Enviar archivos pendientes
-    if (pendingFiles.length > 0 && onProgress) {
-      await onProgress(`✏️ Creando archivos:\n${pendingFiles.join('\n')}`)
-    }
+    // nothing to clean up
   }
 
+  // Show summary of generated/modified files
   if (onProgress) {
-    // Mostrar resumen de archivos creados
+    const elapsed = Math.round((Date.now() - startTime) / 1000)
     try {
-      const { readFileSync, statSync } = await import('fs')
       const files = readdirSync(dir, { recursive: true })
-      const summary = []
+      const newFiles = []
+      const modifiedFiles = []
 
       for (const file of files) {
-        if (typeof file === 'string' && !file.includes('node_modules')) {
-          const path = `${dir}/${file}`
+        if (typeof file === 'string' && !file.includes('node_modules') && !file.includes('.git')) {
+          const fullPath = join(dir, file)
           try {
-            const stat = statSync(path)
-            if (stat.isFile()) {
-              const icon = file.endsWith('.js') ? '📄' : file.endsWith('.json') ? '📦' : file.endsWith('.yml') ? '⚙️' : file.endsWith('Dockerfile') ? '🐳' : '📁'
-              const size = stat.size
-              const sizeStr = size > 1024 ? `${(size/1024).toFixed(1)}KB` : `${size}B`
-              summary.push(`${icon} \`${file}\` (${sizeStr})`)
-
-              // Mostrar primeras líneas de archivos clave
-              if (file === 'package.json' || file === 'src/index.js') {
-                const content = readFileSync(path, 'utf8').split('\n').slice(0, 3).join('\n')
-                summary.push(`  \`\`\`\n${content}\n  ...\`\`\``)
-              }
+            const stat = statSync(fullPath)
+            if (!stat.isFile()) continue
+            const icon = file.endsWith('.js') ? '📄' : file.endsWith('.json') ? '📦' : file.endsWith('.css') ? '🎨' : file.endsWith('.html') ? '🌐' : file === 'Dockerfile' ? '🐳' : '📁'
+            const sizeStr = stat.size > 1024 ? `${(stat.size/1024).toFixed(1)}KB` : `${stat.size}B`
+            const entry = `${icon} \`${file}\` (${sizeStr})`
+            if (initialFiles.has(file)) {
+              modifiedFiles.push(entry)
+            } else {
+              newFiles.push(entry)
             }
-          } catch (err) {
-            // Ignorar errores
-          }
+          } catch {}
         }
       }
 
-      if (summary.length > 0) {
-        await onProgress(`📋 Archivos generados:\n${summary.slice(0, 12).join('\n')}`)
-      }
-    } catch (err) {
-      // Ignorar errores de resumen
+      let summary = `✅ Código generado en ${elapsed}s\n\n`
+      if (newFiles.length) summary += `*Archivos creados:*\n${newFiles.slice(0, 15).join('\n')}\n`
+      if (modifiedFiles.length && mode !== 'new') summary += `\n*Archivos modificados:*\n${modifiedFiles.slice(0, 10).join('\n')}`
+      await onProgress(summary.trim())
+    } catch {
+      await onProgress(`✅ Código generado en ${elapsed}s`)
     }
-
-    await onProgress('✅ Código listo')
   }
   fixUnicodeChars(dir)
 }
@@ -544,22 +574,22 @@ function isOpenRouterModel(model) {
   return config.openrouterKey && (model.startsWith('openrouter/') || model.includes(':'))
 }
 
-async function buildAndVerify(dir, name, description, onStatus, errorContext = null, model = 'claude-sonnet-4-6') {
+async function buildAndVerify(dir, name, description, onStatus, errorContext = null, model = 'claude-sonnet-4-6', mode = 'new') {
   let modelTag = '🚀 Sonnet'
   if (model.includes('opus')) modelTag = '🧠 Opus'
   else if (model.includes('haiku')) modelTag = '⚡ Haiku'
 
-  log.info(`[${name}] build start`, `model=${model} dir=${dir}`)
+  log.info(`[${name}] build start`, `model=${model} dir=${dir} mode=${mode}`)
 
   if (isOpenRouterModel(model)) {
     await onStatus(`${modelTag} Usando OpenRouter...`)
     await runOpenRouter(dir, name, description, errorContext, model.replace('openrouter/', ''))
   } else {
-    await onStatus(`${modelTag} Analizando requisitos...\n_Pensando..._`)
+    const modeLabel = mode === 'new' ? 'Generando proyecto' : mode === 'full' ? 'Regenerando proyecto' : 'Aplicando cambios'
+    await onStatus(`${modelTag} ${modeLabel}...`)
     try {
-      await runClaude(dir, name, description, onStatus, errorContext, model)
+      await runClaude(dir, name, description, onStatus, errorContext, model, mode)
       log.info(`[${name}] code generated`)
-      await onStatus(`✅ Código generado exitosamente`)
     } catch (err) {
       log.error(`[${name}] code generation failed`, err.message)
       throw new Error(`Error generando código: ${err.message}`)
@@ -638,39 +668,49 @@ CMD ["npm", "start"]`
   await onStatus(`✅ App en ejecución\n🔗 ${url}`)
 }
 
-async function deployWithRetry(ctx, dir, name, description, action, model = 'claude-sonnet-4-6') {
+async function deployWithRetry(ctx, dir, name, description, action, model = 'claude-sonnet-4-6', mode = null) {
   let lastError = null
-  let lastMsgId = null
-  let lastUpdateTime = 0
-  const UPDATE_INTERVAL = 2000 // Edita cada 2s, crea msg nuevo cada cambio de etapa
+  let statusMsgId = null
+  const buildStart = Date.now()
 
-  const modelTag = model.includes('opus') ? '🧠 Opus' : '🚀 Sonnet'
+  if (!mode) mode = action === 'new' ? 'new' : 'rebuild'
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const onStatus = async (text) => {
-      const prefix = attempt > 1 ? `🔄 Reintento ${attempt}/${MAX_RETRIES}\n` : ''
-      const fullText = prefix + text
+      const elapsed = Math.round((Date.now() - buildStart) / 1000)
+      const timeStr = elapsed > 60 ? `${Math.floor(elapsed/60)}m ${elapsed%60}s` : `${elapsed}s`
+      const prefix = attempt > 1 ? `🔄 Reintento ${attempt}/${MAX_RETRIES} · ` : ''
+      const fullText = `${prefix}⏱ ${timeStr}\n\n${text}`
 
-      // Siempre crear nuevo mensaje - esto mantiene el historial visible
+      // Try to edit existing message, create new if needed
+      if (statusMsgId) {
+        try {
+          await ctx.telegram.editMessageText(ctx.chat.id, statusMsgId, null, fullText, { parse_mode: 'Markdown' })
+          return
+        } catch {
+          // edit failed (message too old or content same), send new
+        }
+      }
       const msg = await ctx.reply(fullText, { parse_mode: 'Markdown' })
-      lastMsgId = msg.message_id
+      statusMsgId = msg.message_id
     }
 
     try {
       if (attempt > 1) {
-        await onStatus(`🔄 *Reintento ${attempt}/${MAX_RETRIES}*\nClaude está corrigiendo los errores.`)
+        statusMsgId = null
+        await onStatus(`🔄 *Reintento ${attempt}/${MAX_RETRIES}*\nCorrigiendo errores del intento anterior...`)
       }
 
       await buildAndVerify(dir, name, description, onStatus,
-        attempt > 1 ? lastError?.message : null, model)
+        attempt > 1 ? lastError?.message : null, model, mode)
 
       return true
     } catch (err) {
       lastError = err
       log.error(`[${name}] attempt ${attempt} failed`, err.message)
       if (attempt < MAX_RETRIES) {
+        statusMsgId = null
         await ctx.reply(`⚠️ Intento ${attempt} fallido, reintentando...\n\`${err.message.slice(0, 200)}\``, { parse_mode: 'Markdown' })
-        lastMsgId = null // Reset para nuevo ciclo
         await new Promise(r => setTimeout(r, 2000))
       }
     }
@@ -740,7 +780,7 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
     }
   }
 
-  const ok = await deployWithRetry(ctx, dir, name, description, 'rebuild', model)
+  const ok = await deployWithRetry(ctx, dir, name, description, 'rebuild', model, mode)
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: dir, model })
 
