@@ -7,6 +7,7 @@ import { config } from '../lib/config.js'
 import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
 import { log } from '../lib/logger.js'
+import { initGitRepo, gitCommit } from './git.js'
 
 const MAX_RETRIES = 2
 
@@ -687,6 +688,14 @@ export async function deployNew(ctx, name, description, model = 'claude-sonnet-4
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: projectDir(name), model })
 
+    // Auto-init git repo + initial commit
+    try {
+      await initGitRepo(name, null)
+      log.info(`[${name}] git repo initialized`)
+    } catch (err) {
+      log.error(`[${name}] git init failed`, err.message)
+    }
+
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
     const url = projectUrl(name)
@@ -734,6 +743,17 @@ export async function deployRebuild(ctx, name, description, model = 'claude-sonn
   const ok = await deployWithRetry(ctx, dir, name, description, 'rebuild', model)
   if (ok) {
     store.set(name, { description, url: projectUrl(name), dir: dir, model })
+
+    // Auto-commit changes
+    try {
+      const commitMsg = mode === 'full'
+        ? `Rebuild completo: ${description.slice(0, 100)}`
+        : `Patch: ${description.split('Cambios solicitados:').pop()?.trim().slice(0, 100) || description.slice(0, 100)}`
+      await gitCommit(name, commitMsg)
+      log.info(`[${name}] git commit after rebuild`)
+    } catch (err) {
+      log.error(`[${name}] git commit failed`, err.message)
+    }
 
     // Mensaje final elegante con botones
     const { Markup } = await import('telegraf')
