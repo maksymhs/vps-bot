@@ -8,7 +8,7 @@ import { store } from '../lib/store.js'
 import { recordClaudeCall } from '../lib/usage.js'
 import { log } from '../lib/logger.js'
 import { initGitRepo, gitCommit } from './git.js'
-import { syncTemplates, matchTemplate, copyBoilerplate, getInstructions, getBoilerplateFiles } from '../lib/templates.js'
+import { syncTemplates, matchTemplate, resolveAndCopy } from '../lib/templates.js'
 
 const MAX_RETRIES = 2
 
@@ -183,29 +183,35 @@ function buildClaudePrompt(name, description, errorContext = null, templateInfo 
 }
 
 function buildTemplatePrompt(name, description, templateInfo, errorContext = null) {
-  const { templateName, instructions, boilerplateFiles } = templateInfo
+  const { templateName, stackName, instructions, boilerplateFiles, components } = templateInfo
   const fileList = boilerplateFiles.map(f => `  - ${f}`).join('\n')
 
+  const source = stackName ? `stack "${stackName}" (base: ${templateName})` : `template "${templateName}"`
   let prompt =
-    `Build a web application based on the "${templateName}" template.\n\n` +
+    `Build a web application based on the ${source}.\n\n` +
     `Name: ${name}\n` +
     `Description: ${description}\n\n` +
-    `TEMPLATE BOILERPLATE FILES (already in project directory):\n${fileList}\n\n`
+    `FILES ALREADY IN PROJECT DIRECTORY:\n${fileList}\n\n`
+
+  if (components.length) {
+    prompt += `INCLUDED COMPONENTS: ${components.join(', ')}\n\n`
+  }
 
   if (instructions) {
-    prompt += `TEMPLATE INSTRUCTIONS:\n${instructions}\n\n`
+    prompt += `INSTRUCTIONS:\n${instructions}\n\n`
   }
 
   prompt +=
     `YOUR TASK:\n` +
-    `1. The boilerplate files above are already copied into the project directory\n` +
+    `1. The files listed above are already copied into the project directory\n` +
     `2. Customize and extend them to match the user's description\n` +
     `3. Modify existing files as needed — you can overwrite any boilerplate file\n` +
     `4. Add new files if the description requires functionality beyond the template\n` +
-    `5. Update package.json name to "${name}"\n` +
-    `6. Ensure GET /health returns { status: "ok" } — MANDATORY\n` +
-    `7. Use ONLY ASCII characters in code\n` +
-    `8. Do NOT add the project name as a visible title\n\n` +
+    `5. Integrate all components listed above into the application\n` +
+    `6. Update package.json name to "${name}"\n` +
+    `7. Ensure GET /health returns { status: "ok" } — MANDATORY\n` +
+    `8. Use ONLY ASCII characters in code\n` +
+    `9. Do NOT add the project name as a visible title\n\n` +
     `Write ALL modified/new files to disk. Code only, no explanations.`
 
   if (errorContext) {
@@ -613,7 +619,7 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
 
   log.info(`[${name}] build start`, `model=${model} dir=${dir} mode=${mode}`)
 
-  // Template flow: sync repo, match template, copy boilerplate (only for new/full builds)
+  // Template flow: sync repo, match template+components, copy files (only for new/full builds)
   let templateInfo = null
   if (mode === 'new' || mode === 'full') {
     await onStatus('📦 Syncing templates...')
@@ -621,24 +627,18 @@ async function buildAndVerify(dir, name, description, onStatus, errorContext = n
     if (synced) {
       const match = matchTemplate(description)
       if (match) {
-        const { template } = match
-        log.info(`[${name}] template matched: ${template.name} (score=${match.score})`)
-        await onStatus(`📋 Using template: ${template.displayName}`)
+        const label = match.stack
+          ? `stack: ${match.stack.displayName || match.stack.name}`
+          : `template: ${match.template.displayName}`
+        log.info(`[${name}] matched ${label} (score=${match.score})`)
+        await onStatus(`📋 Using ${label}`)
 
-        // Copy boilerplate files into project directory
-        const copied = copyBoilerplate(template.name, dir)
-        if (copied) {
-          // Ensure vpsbot user can write to copied files
+        // Copy template boilerplate + component files in one call
+        templateInfo = resolveAndCopy(match, dir)
+        if (templateInfo) {
           try { execSync(`chown -R vpsbot:vpsbot ${JSON.stringify(dir)}`) } catch {}
-
-          templateInfo = {
-            templateName: template.name,
-            instructions: getInstructions(template.name),
-            boilerplateFiles: getBoilerplateFiles(template.name),
-          }
-          // Save template used in store for future reference
-          store.set(name, { template: template.name })
-          log.info(`[${name}] boilerplate copied, ${templateInfo.boilerplateFiles.length} files`)
+          store.set(name, { template: templateInfo.templateName, components: templateInfo.components, stack: templateInfo.stackName })
+          log.info(`[${name}] files copied: ${templateInfo.boilerplateFiles.length} files, components=[${templateInfo.components.join(',')}]`)
         }
       } else {
         log.info(`[${name}] no template matched, using generic build`)
